@@ -60,10 +60,10 @@
         mode: "0644"
 
   always:
-    - name: Unmount Ubuntu ISO
+    - name: Unmount Ubuntu ISO and remove fstab entry
       ansible.posix.mount:
         path: "{{ ubuntu_mnt.path }}"
-        state: unmounted
+        state: absent
       when: ubuntu_mnt is defined
 
     - name: Remove Ubuntu temp mount point
@@ -120,10 +120,10 @@
       delegate_to: "{{ inventory_hostname }}"
 
   always:
-    - name: Unmount Rocky ISO
+    - name: Unmount Rocky ISO and remove fstab entry
       ansible.posix.mount:
         path: "{{ rocky_mnt.path }}"
-        state: unmounted
+        state: absent
       when: rocky_mnt is defined
 
     - name: Remove Rocky temp mount point
