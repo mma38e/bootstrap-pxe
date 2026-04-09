@@ -32,8 +32,6 @@ VSCODE_RPM_URL="https://update.code.visualstudio.com/latest/linux-rpm-x64/stable
 
 ANSIBLE_IMAGE="${ANSIBLE_RUNNER_IMAGE:-mma38e/ansible-runner:latest}"
 
-PXE_ISO_DIR="${FILES_DIR}/isos"
-
 # PXE client ISO URLs — override with environment variables if needed
 UBUNTU_ISO_URL="${UBUNTU_ISO_URL:-https://releases.ubuntu.com/22.04/ubuntu-22.04.5-live-server-amd64.iso}"
 UBUNTU_ISO_SHA256="${UBUNTU_ISO_SHA256:-9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0}"
@@ -47,6 +45,7 @@ ISO_WORK="${WORK_DIR}/iso"
 FILES_DIR="${SCRIPT_DIR}/files"
 RPM_DIR="${FILES_DIR}/rpms"
 IMAGE_DIR="${FILES_DIR}/images"
+PXE_ISO_DIR="${FILES_DIR}/isos"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
