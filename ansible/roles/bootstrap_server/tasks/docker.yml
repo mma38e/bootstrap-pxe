@@ -1,0 +1,24 @@
+---
+# docker.yml — Ensure Docker CE is running and the admin user is in the docker group.
+#
+# Docker CE is installed by bootstrap.sh (via dnf localinstall) before Ansible runs.
+# This task only ensures the service state and group membership — it does NOT
+# attempt to download or install Docker CE packages.
+
+- name: Enable and start Docker service
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: "{{ docker_service_state }}"
+
+- name: Ensure docker group exists
+  ansible.builtin.group:
+    name: docker
+    state: present
+
+- name: Add admin user to docker group
+  ansible.builtin.user:
+    name: "{{ bootstrap_admin_user }}"
+    groups: docker
+    append: true
+  when: bootstrap_admin_user is defined and bootstrap_admin_user != 'root'

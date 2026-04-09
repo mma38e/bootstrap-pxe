@@ -1,0 +1,12 @@
+---
+# Handlers — triggered by notify directives in tasks
+
+- name: restart httpd
+  ansible.builtin.systemd:
+    name: httpd
+    state: restarted
+
+- name: restart docker
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted

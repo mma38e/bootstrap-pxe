@@ -1,0 +1,24 @@
+---
+# directories.yml — Create the bootstrap server directory structure
+
+- name: Create bootstrap project directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ bootstrap_data_dirs }}"
+
+- name: Create admin user home subdirectories
+  ansible.builtin.file:
+    path: "/home/{{ bootstrap_admin_user }}/{{ item }}"
+    state: directory
+    owner: "{{ bootstrap_admin_user }}"
+    group: "{{ bootstrap_admin_user }}"
+    mode: "0750"
+  loop:
+    - .ssh
+    - bin
+    - projects
+  when: bootstrap_admin_user is defined and bootstrap_admin_user != 'root'

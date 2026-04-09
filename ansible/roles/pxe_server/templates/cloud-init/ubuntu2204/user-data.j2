@@ -1,0 +1,43 @@
+#cloud-config
+# Ubuntu 22.04 autoinstall configuration — skeleton
+# Customise before use. CHANGEME sections must be updated.
+
+autoinstall:
+  version: 1
+
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+
+  network:
+    version: 2
+    ethernets:
+      any:
+        match:
+          name: "en*"
+        dhcp4: true
+
+  storage:
+    layout:
+      name: lvm
+
+  identity:
+    hostname: ubuntu-pxe
+    # CHANGEME: set your username
+    username: ubuntu
+    # CHANGEME: generate with: openssl passwd -6 yourpassword
+    password: "$6$CHANGEME$longhashhere"
+
+  ssh:
+    install-server: true
+    allow-pw: true
+    # CHANGEME: add your public key
+    # authorized-keys:
+    #   - "ssh-ed25519 AAAA... user@host"
+
+  packages:
+    - openssh-server
+    - curl
+
+  late-commands:
+    - echo "Autoinstall complete" >> /target/root/autoinstall.log

@@ -1,0 +1,17 @@
+===========================================================
+  Bootstrap Server — {{ ansible_hostname }}
+===========================================================
+  IP:       {{ ansible_default_ipv4.address | default('unknown') }}
+  OS:       {{ ansible_distribution }} {{ ansible_distribution_version }}
+  Kernel:   {{ ansible_kernel }}
+  Uptime:   {{ ansible_uptime_seconds | int // 3600 }}h {{ (ansible_uptime_seconds | int % 3600) // 60 }}m
+
+  Docker:   {{ 'running' if ansible_facts.services['docker.service'] is defined else 'check status' }}
+
+  Role:     Ansible Controller / Bootstrap Node
+===========================================================
+  Useful commands:
+    docker ps              — list running containers
+    cd /root/bootstrap     — bootstrap artifacts
+    /opt/bootstrap/        — project data directory
+===========================================================

@@ -1,0 +1,32 @@
+---
+# bootstrap_server role — Task orchestration
+# Run specific stages with --tags, e.g.: --tags packages,docker
+
+- name: Install packages
+  import_tasks: packages.yml
+  tags: [packages]
+
+- name: Configure Docker
+  import_tasks: docker.yml
+  tags: [docker]
+
+- name: Create directory structure
+  import_tasks: directories.yml
+  tags: [directories]
+
+- name: Configure users
+  import_tasks: users.yml
+  tags: [users]
+
+- name: Configure services
+  import_tasks: services.yml
+  tags: [services]
+
+- name: Deploy MOTD
+  ansible.builtin.template:
+    src: motd.j2
+    dest: /etc/motd
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [motd]

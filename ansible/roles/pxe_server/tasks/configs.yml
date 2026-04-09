@@ -1,0 +1,60 @@
+---
+# Template and copy all runtime configuration files.
+# Each task notifies the relevant handler to restart only the affected container.
+
+- name: Render .env file
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ project_dir }}/src/.env"
+    mode: "0640"
+  notify: restart dhcp container
+
+- name: Render GRUB2 EFI menu (grub.cfg)
+  ansible.builtin.template:
+    src: grub.cfg.j2
+    dest: "{{ project_dir }}/data/tftpboot/grub/grub.cfg"
+    mode: "0644"
+  notify: restart tftp container
+
+- name: Render syslinux BIOS menu (pxelinux.cfg/default)
+  ansible.builtin.template:
+    src: pxelinux.cfg_default.j2
+    dest: "{{ project_dir }}/data/tftpboot/pxelinux.cfg/default"
+    mode: "0644"
+  notify: restart tftp container
+
+- name: Render Rocky 9 kickstart profiles
+  ansible.builtin.template:
+    src: "kickstart/{{ item.name }}.ks.j2"
+    dest: "{{ project_dir }}/data/webroot/kickstart/{{ item.name }}.ks"
+    mode: "0644"
+  loop: "{{ rocky9_profiles + rocky9_extra_profiles }}"
+  when: rocky9_enabled | bool
+  notify: restart http container
+
+- name: Render cloud-init user-data profiles
+  ansible.builtin.template:
+    src: "cloud-init/{{ item.name }}/user-data.j2"
+    dest: "{{ project_dir }}/data/webroot/cloud-init/{{ item.name }}/user-data"
+    mode: "0644"
+  loop: "{{ ubuntu2204_profiles + ubuntu2204_extra_profiles }}"
+  when: ubuntu2204_enabled | bool
+  notify: restart http container
+
+- name: Create cloud-init vendor-data (empty)
+  ansible.builtin.copy:
+    content: "#cloud-config\n{}\n"
+    dest: "{{ project_dir }}/data/webroot/cloud-init/{{ item.name }}/vendor-data"
+    mode: "0644"
+  loop: "{{ ubuntu2204_profiles + ubuntu2204_extra_profiles }}"
+  when: ubuntu2204_enabled | bool
+  notify: restart http container
+
+- name: Render cloud-init meta-data profiles
+  ansible.builtin.template:
+    src: "cloud-init/{{ item.name }}/meta-data.j2"
+    dest: "{{ project_dir }}/data/webroot/cloud-init/{{ item.name }}/meta-data"
+    mode: "0644"
+  loop: "{{ ubuntu2204_profiles + ubuntu2204_extra_profiles }}"
+  when: ubuntu2204_enabled | bool
+  notify: restart http container

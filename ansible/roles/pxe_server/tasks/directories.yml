@@ -1,0 +1,89 @@
+---
+# Create the host directory tree that bind-mounts map into containers.
+# Ansible writes boot files and configs here before the stack starts.
+
+- name: Debug - show SSH user and playbook directory
+  debug:
+    msg: "ansible_user={{ ansible_user }}, playbook_dir={{ playbook_dir }}, project_dir={{ project_dir }}, ansible_ssh_args={{ ansible_ssh_args | default('not set') }}"
+
+- name: Create project base directory
+  file:
+    path: "{{ project_dir }}"
+    state: directory
+    mode: "0755"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  become: true
+
+- name: Create bind-mount data directories
+  file:
+    path: "{{ project_dir }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - data/dhcp-leases
+    - data/tftpboot/pxelinux.cfg
+    - data/tftpboot/grub
+    - data/tftpboot/boot/ubuntu2204
+    - data/webroot/ubuntu/22.04
+    - data/webroot/rocky/9
+    - data/webroot/kickstart
+    - data/webroot/cloud-init
+
+- name: Create cloud-init profile directories
+  file:
+    path: "{{ project_dir }}/data/webroot/cloud-init/{{ item.name }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ ubuntu2204_profiles + ubuntu2204_extra_profiles }}"
+  when: ubuntu2204_enabled | bool
+
+
+- name: Copy project source files to target host
+  block:
+    - name: Create source directory archive on control node
+      command:
+        cmd: tar cf /tmp/pxe-src.tar --exclude=.git --exclude=data --exclude='*.iso' -C {{ playbook_dir }}/.. .
+      delegate_to: localhost
+      run_once: true
+
+    - name: Copy archive to target host
+      copy:
+        src: /tmp/pxe-src.tar
+        dest: /tmp/pxe-src.tar
+        mode: "0644"
+
+    - name: Create src directory
+      file:
+        path: "{{ project_dir }}/src"
+        state: directory
+        mode: "0755"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Extract archive on target host
+      ansible.builtin.unarchive:
+        src: /tmp/pxe-src.tar
+        dest: "{{ project_dir }}/src/"
+        remote_src: yes
+
+    - name: Clean up archive on control node
+      file:
+        path: /tmp/pxe-src.tar
+        state: absent
+      delegate_to: localhost
+      run_once: true
+
+    - name: Clean up archive on target
+      file:
+        path: /tmp/pxe-src.tar
+        state: absent
+
+- name: Fix ownership of data directories
+  file:
+    path: "{{ project_dir }}/data"
+    owner: root
+    group: root
+    mode: "0755"
+    recurse: true
+  become: true

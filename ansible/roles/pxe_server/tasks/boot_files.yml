@@ -1,0 +1,138 @@
+---
+# Download OS ISOs and extract PXE boot kernels + initrds.
+#
+# grubx64.efi and syslinux BIOS modules are baked into the pxe-tftp container
+# image (built via grub-mkimage in the Dockerfile). The container's entrypoint
+# copies them into /tftpboot on first start — no host package installs needed.
+#
+# When airgap_mode is true, ISOs are pre-staged by bootstrap.sh and copied
+# from airgap_iso_staging_dir instead of downloaded from the internet.
+
+# ── Ubuntu 22.04 ───────────────────────────────────────────────────────────────
+- name: Download Ubuntu 22.04 live server ISO
+  ansible.builtin.get_url:
+    url: "{{ ubuntu2204_iso_url }}"
+    dest: "{{ project_dir }}/data/webroot/ubuntu/22.04/ubuntu-22.04-live-server-amd64.iso"
+    checksum: "{{ ubuntu2204_iso_checksum }}"
+    mode: "0644"
+  when:
+    - ubuntu2204_enabled | bool
+    - not (airgap_mode | default(false))
+
+- name: Copy pre-staged Ubuntu 22.04 ISO (airgap)
+  ansible.builtin.copy:
+    src: "{{ airgap_iso_staging_dir }}/ubuntu-22.04-live-server-amd64.iso"
+    dest: "{{ project_dir }}/data/webroot/ubuntu/22.04/ubuntu-22.04-live-server-amd64.iso"
+    remote_src: true
+    mode: "0644"
+  when:
+    - ubuntu2204_enabled | bool
+    - airgap_mode | default(false)
+
+- name: Extract Ubuntu 22.04 kernel and initrd from ISO
+  block:
+    - name: Create temporary mount point (Ubuntu)
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: pxe_ubuntu_
+      register: ubuntu_mnt
+
+    - name: Mount Ubuntu ISO
+      ansible.posix.mount:
+        src: "{{ project_dir }}/data/webroot/ubuntu/22.04/ubuntu-22.04-live-server-amd64.iso"
+        path: "{{ ubuntu_mnt.path }}"
+        fstype: iso9660
+        opts: loop,ro
+        state: mounted
+
+    - name: Copy Ubuntu vmlinuz from casper/
+      ansible.builtin.copy:
+        src: "{{ ubuntu_mnt.path }}/casper/vmlinuz"
+        dest: "{{ project_dir }}/data/tftpboot/boot/ubuntu2204/vmlinuz"
+        remote_src: true
+        mode: "0644"
+
+    - name: Copy Ubuntu initrd from casper/
+      ansible.builtin.copy:
+        src: "{{ ubuntu_mnt.path }}/casper/initrd"
+        dest: "{{ project_dir }}/data/tftpboot/boot/ubuntu2204/initrd"
+        remote_src: true
+        mode: "0644"
+
+  always:
+    - name: Unmount Ubuntu ISO
+      ansible.posix.mount:
+        path: "{{ ubuntu_mnt.path }}"
+        state: unmounted
+      when: ubuntu_mnt is defined
+
+    - name: Remove Ubuntu temp mount point
+      ansible.builtin.file:
+        path: "{{ ubuntu_mnt.path }}"
+        state: absent
+      when: ubuntu_mnt is defined
+
+  when: ubuntu2204_enabled | bool
+
+# ── Rocky Linux 9 ─────────────────────────────────────────────────────────────
+- name: Download Rocky Linux 9 DVD ISO to webroot
+  ansible.builtin.get_url:
+    url: "{{ rocky9_iso_url }}"
+    dest: "{{ project_dir }}/data/webroot/rocky/9/Rocky-9-dvd.iso"
+    checksum: "{{ rocky9_iso_checksum }}"
+    mode: "0644"
+  when:
+    - rocky9_enabled | bool
+    - not (airgap_mode | default(false))
+
+- name: Copy pre-staged Rocky 9 ISO (airgap)
+  ansible.builtin.copy:
+    src: "{{ airgap_iso_staging_dir }}/Rocky-9-dvd.iso"
+    dest: "{{ project_dir }}/data/webroot/rocky/9/Rocky-9-dvd.iso"
+    remote_src: true
+    mode: "0644"
+  when:
+    - rocky9_enabled | bool
+    - airgap_mode | default(false)
+
+- name: Extract Rocky 9 boot files from ISO to webroot
+  block:
+    - name: Create temporary mount point (Rocky)
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: pxe_rocky_
+      register: rocky_mnt
+
+    - name: Mount Rocky ISO
+      ansible.posix.mount:
+        src: "{{ project_dir }}/data/webroot/rocky/9/Rocky-9-dvd.iso"
+        path: "{{ rocky_mnt.path }}"
+        fstype: iso9660
+        opts: loop,ro
+        state: mounted
+
+    - name: Sync full ISO tree to webroot
+      ansible.posix.synchronize:
+        src: "{{ rocky_mnt.path }}/"
+        dest: "{{ project_dir }}/data/webroot/rocky/9/"
+        recursive: true
+        delete: false
+      delegate_to: "{{ inventory_hostname }}"
+
+  always:
+    - name: Unmount Rocky ISO
+      ansible.posix.mount:
+        path: "{{ rocky_mnt.path }}"
+        state: unmounted
+      when: rocky_mnt is defined
+
+    - name: Remove Rocky temp mount point
+      ansible.builtin.file:
+        path: "{{ rocky_mnt.path }}"
+        state: absent
+      when: rocky_mnt is defined
+
+  when: rocky9_enabled | bool
+
+# Boot loader binaries (grubx64.efi, pxelinux.0, syslinux modules) are
+# provided by the pxe-tftp container image — no tasks needed here.

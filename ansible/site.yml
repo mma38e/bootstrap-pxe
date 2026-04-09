@@ -1,0 +1,17 @@
+---
+# Bootstrap + PXE Server — Main Playbook
+#
+# Runs via: docker run ansible-runner ansible-playbook -i inventory.ini site.yml
+# Targets the host by IP (not localhost) since ansible-runner runs in a container.
+# This playbook is invoked by bootstrap.sh after Docker CE is installed.
+#
+# Phase 1 (bootstrap_server): base packages, Docker service, admin user, dirs
+# Phase 2 (pxe_server):       PXE boot files, configs, container stack
+
+- name: Configure Bootstrap + PXE Server
+  hosts: bootstrap_servers
+  become: true
+
+  roles:
+    - bootstrap_server
+    - pxe_server

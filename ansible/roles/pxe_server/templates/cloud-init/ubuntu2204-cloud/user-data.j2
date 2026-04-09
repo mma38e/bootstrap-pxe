@@ -1,0 +1,76 @@
+#cloud-config
+# Ubuntu 22.04 autoinstall — cloud user profile
+# Translated from existing server's cloud-config.
+#
+# CHANGEME: update `hostname` in the identity section before use.
+# Served at: http://HTTP_SERVER_IP/cloud-init/ubuntu2204-cloud/
+
+autoinstall:
+  version: 1
+
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+
+  network:
+    version: 2
+    ethernets:
+      any:
+        match:
+          name: "en*"
+        dhcp4: true
+
+  storage:
+    layout:
+      name: lvm
+
+  # identity: creates the user during the install phase.
+  # The password hash is taken directly from the existing server's /etc/shadow.
+  identity:
+    hostname: cloud2
+    username: cloud
+    password: "$6$xll3iOrN2/unePkY$dGw.lX9H4wX7t2E6UceaZC/JBx5s8S.t7GrVGZ4stvaJ/RDeCHeNx/svPAulJSjRW6G8ERe/Ac2PSPQd.qek0/"
+    realname: cloud
+
+  ssh:
+    install-server: true
+    # Matches ssh_pwauth: true from the source machine
+    allow-pw: true
+
+  packages:
+    - openssh-server
+    - ca-certificates
+    - curl
+    - gnupg
+    - lsb-release
+    - iputils-ping
+    - rsync
+    - vim
+    - vi 
+    - nano
+
+  # user-data: runs as cloud-init after the installer finishes.
+  # Replicates the exact cloud-config from the source machine:
+  #   - locks growpart/resize (not relevant post-install but kept for parity)
+  #   - adds the full group membership the source user had
+  #   - ensures SSH password auth is on
+  user-data:
+    preserve_hostname: true
+    ssh_pwauth: true
+
+    users:
+      - name: cloud
+        gecos: cloud
+        shell: /bin/bash
+        lock_passwd: false
+        passwd: "$6$xll3iOrN2/unePkY$dGw.lX9H4wX7t2E6UceaZC/JBx5s8S.t7GrVGZ4stvaJ/RDeCHeNx/svPAulJSjRW6G8ERe/Ac2PSPQd.qek0/"
+        groups:
+          - adm
+          - cdrom
+          - dip
+          - plugdev
+          - sudo
+          - users
+
+  late-commands:
+    - echo "Autoinstall complete (cloud profile)" >> /target/root/autoinstall.log

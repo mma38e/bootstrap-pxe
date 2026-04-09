@@ -1,0 +1,7 @@
+# inventory.example — copy to inventory.ini and fill in your values
+# Do NOT use localhost or ansible_connection=local — ansible-runner runs in
+# a container, so it must SSH to the host IP.
+# Variables are in group_vars/all.yml
+
+[bootstrap_servers]
+local-bootstrap ansible_host=192.168.1.10

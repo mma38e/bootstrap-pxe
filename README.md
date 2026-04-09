@@ -1,0 +1,202 @@
+# bootstrap-pxe
+
+A self-contained provisioning kit for a Rocky Linux 9.7 bootstrap + PXE server.
+
+This is the **first machine** in an airgapped environment. It installs Rocky Linux,
+configures itself as an infrastructure controller with Docker and Ansible, then runs
+a containerized PXE server to network-boot all other machines. Everything from OS
+install through PXE service deployment is handled by a single ISO.
+
+---
+
+## How It Works
+
+```
+[Internet machine]          [Target machine]
+  build-iso.sh   ─→  ISO  ─→  kickstart  ─→  bootstrap.sh  ─→  Ansible roles
+  (online prep)        (boot)   (OS install)   (Docker + load)   (bootstrap + PXE)
+```
+
+1. **`build-iso.sh`** runs on any internet-connected machine. It downloads the Rocky
+   9.7 ISO, Docker CE RPMs, ansible-runner image, builds PXE container images, and
+   optionally downloads PXE client ISOs (Ubuntu, Rocky). Everything is packed into
+   a custom bootable ISO.
+
+2. Boot the target machine from the ISO. **Anaconda** runs `bootstrap.ks`:
+   - `%pre` prompts for hostname and static IP
+   - Installs Rocky 9.7 with LVM
+   - `%post` places all artifacts in `/root/bootstrap/`
+
+3. After reboot, run **`bootstrap.sh`** as root:
+   - Installs Docker CE from local RPMs (no internet needed)
+   - Loads ansible-runner + PXE container images
+   - Injects host IP into inventory and group_vars
+   - Runs the Ansible playbook with both roles
+
+4. **Ansible roles** finish the setup:
+   - **`bootstrap_server`**: base packages, Docker service, admin user, directories
+   - **`pxe_server`**: PXE boot files, configs, containerized DHCP/TFTP/HTTP stack
+
+---
+
+## Airgap Requirements
+
+`build-iso.sh` downloads everything automatically on an internet-connected machine.
+The resulting ISO is self-contained — no internet access is needed on the target.
+
+| Artifact | Source | Notes |
+|---|---|---|
+| Rocky 9.7 DVD ISO | `download.rockylinux.org` | For installing the host OS |
+| Docker CE RPMs | `download.docker.com` | docker-ce, cli, containerd, compose-plugin |
+| EPEL packages | `dl.fedoraproject.org` | htop, iotop, iperf3, minicom, screen + deps |
+| ansible-runner image | `docker save mma38e/ansible-runner:latest` | Ansible execution container |
+| PXE container images | Built by `docker compose build` | pxe-dhcp, pxe-tftp, pxe-http |
+| Ubuntu 22.04 ISO | `releases.ubuntu.com` | Optional — for PXE clients |
+| Rocky 9 DVD ISO | `download.rockylinux.org` | Optional — for PXE clients |
+
+> The `files/` directory is gitignored. Never commit RPMs, images, or ISOs.
+
+---
+
+## Prerequisites
+
+### On the internet-connected machine (for `build-iso.sh`)
+
+```bash
+dnf install xorriso isomd5sum curl python3
+# Docker must be installed and running
+```
+
+Required disk space: **≥ 50 GB** (more if including PXE client ISOs).
+
+### On the target machine
+
+- Bootable media (USB, virtual ISO) containing the output ISO
+- ≥ 80 GB disk, ≥ 8 GB RAM
+- Console access for the kickstart network prompts
+
+---
+
+## Usage
+
+### Step 1 — Build the ISO (internet-connected machine)
+
+```bash
+git clone <this-repo>
+cd bootstrap-pxe
+./build-iso.sh
+```
+
+The script will prompt for:
+- Root password (hashed with SHA-512, embedded in kickstart)
+- ansible-runner image tag (default: `mma38e/ansible-runner:latest`)
+- Whether to include PXE client ISOs (~12 GB extra)
+
+Output: `bootstrap-pxe-<YYYYMMDD>.iso`
+
+### Step 2 — Boot the target machine
+
+Write the ISO to USB or mount as a virtual disk and boot. The installer will
+prompt for hostname, IP address, netmask, gateway, and DNS.
+
+### Step 3 — Complete setup
+
+```bash
+cd /root/bootstrap
+./bootstrap.sh
+```
+
+This installs Docker, loads all container images, and runs both Ansible roles.
+A successful run ends with `Bootstrap + PXE server setup complete.`
+
+PXE clients can now network boot from this server.
+
+---
+
+## Configuration
+
+### Bootstrap server variables
+
+Override in `ansible/group_vars/all.yml` or via `-e` flags:
+
+| Variable | Default | What it installs |
+|---|---|---|
+| `install_base_tools` | `true` | git, vim, curl, wget, jq, rsync, tmux, unzip |
+| `install_dev_tools` | `true` | python3, pip, make, gcc, kernel-devel |
+| `install_network_tools` | `true` | nmap, tcpdump, bind-utils, socat, iperf3 |
+| `install_monitoring_tools` | `true` | htop, iotop, lsof, strace |
+| `install_serial_tools` | `true` | minicom, screen |
+| `install_k8s_tools` | `false` | kubectl, helm, k9s |
+
+### PXE server variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `airgap_mode` | `true` | Skip ISO downloads, use pre-staged files |
+| `dhcp_interface` | `eth0` | Network interface for dnsmasq |
+| `dhcp_enabled` | `false` | false=proxyDHCP, true=standalone DHCP |
+| `ubuntu2204_enabled` | `true` | Enable Ubuntu PXE boot entries |
+| `rocky9_enabled` | `true` | Enable Rocky PXE boot entries |
+
+### Re-running Ansible only
+
+Once Docker is installed, re-run just the playbook:
+
+```bash
+cd /root/bootstrap
+docker run --rm -i \
+    --network host \
+    -v "$(pwd)/ansible:/runner" \
+    -v /root/.ssh:/root/.ssh:ro \
+    -w /runner \
+    mma38e/ansible-runner:latest \
+    ansible-playbook -i inventory.ini site.yml
+```
+
+Use `--tags packages`, `--tags pxe`, etc. to target specific stages.
+
+---
+
+## Repository Structure
+
+```
+bootstrap-pxe/
+├── build-iso.sh              Online ISO build script
+├── bootstrap.ks              Rocky 9.7 kickstart (injected into ISO)
+├── bootstrap.sh              Post-install (Docker + images + run Ansible)
+├── docker-compose.yml        PXE container stack definition
+├── containers/               PXE container Dockerfiles
+│   ├── dhcp/                 alpine + dnsmasq
+│   ├── tftp/                 alpine + tftpd-hpa (multi-stage build)
+│   └── http/                 nginx:alpine
+├── ansible/
+│   ├── site.yml              Main playbook (both roles)
+│   ├── inventory.ini
+│   ├── group_vars/all.yml    Site-specific overrides
+│   └── roles/
+│       ├── bootstrap_server/ Host setup: packages, Docker, users, dirs
+│       └── pxe_server/       PXE setup: boot files, configs, containers
+├── files/                    Airgap artifacts — gitignored
+├── AGENTS.md                 Architecture reference + developer rules
+└── CHANGELOG.md              Change history
+```
+
+See `AGENTS.md` for full architecture details and developer rules.
+
+---
+
+## Future Work
+
+- NVIDIA driver support
+- Cockpit profile for baremetal deployments
+- Full repo sync support
+
+---
+
+## Contributing
+
+All changes must include updates to:
+1. **`CHANGELOG.md`** — add an entry under today's version/date
+2. **`AGENTS.md`** — update architecture or rules sections if applicable
+
+See `AGENTS.md` for full developer rules.

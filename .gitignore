@@ -1,0 +1,37 @@
+# Airgap artifacts — populated by build-iso.sh, never commit
+files/images/
+files/rpms/
+files/isos/
+files/binaries/
+
+# Working directories created by build-iso.sh
+work/
+
+# Output ISOs
+*.iso
+
+# Environment — contains real IPs and credentials
+.env
+
+# Downloaded OS images and extracted boot files (populated by Ansible)
+data/
+
+# SSH keys
+*.pem
+*.key
+id_rsa
+id_ed25519
+
+# Vault password files
+.vault_pass
+.vault_password
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+*~

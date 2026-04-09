@@ -1,0 +1,47 @@
+---
+# users.yml — Create and configure the admin user
+
+- name: Create admin user
+  ansible.builtin.user:
+    name: "{{ bootstrap_admin_user }}"
+    groups: "{{ bootstrap_admin_groups }}"
+    append: true
+    shell: /bin/bash
+    create_home: true
+    state: present
+  when: bootstrap_admin_user is defined and bootstrap_admin_user != 'root'
+
+- name: Ensure .ssh directory has correct permissions
+  ansible.builtin.file:
+    path: "/home/{{ bootstrap_admin_user }}/.ssh"
+    state: directory
+    owner: "{{ bootstrap_admin_user }}"
+    group: "{{ bootstrap_admin_user }}"
+    mode: "0700"
+  when: bootstrap_admin_user is defined and bootstrap_admin_user != 'root'
+
+- name: Add useful aliases and PATH to admin .bashrc
+  ansible.builtin.blockinfile:
+    path: "/home/{{ bootstrap_admin_user }}/.bashrc"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK — bootstrap-server"
+    block: |
+      # Bootstrap server aliases
+      alias ll='ls -lah --color=auto'
+      alias d='docker'
+      alias dps='docker ps'
+      alias dpsa='docker ps -a'
+      alias dc='docker compose'
+      alias k='kubectl'
+
+      # PATH additions
+      export PATH="/usr/local/bin:${PATH}"
+    create: true
+  when: bootstrap_admin_user is defined and bootstrap_admin_user != 'root'
+
+- name: Allow wheel group sudo without password
+  ansible.builtin.lineinfile:
+    path: /etc/sudoers.d/wheel-nopasswd
+    line: "%wheel ALL=(ALL) NOPASSWD: ALL"
+    create: true
+    mode: "0440"
+    validate: "visudo -cf %s"

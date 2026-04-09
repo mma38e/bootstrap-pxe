@@ -1,0 +1,119 @@
+---
+# packages.yml — Install tool packages
+# EPEL packages (htop, iotop, iperf3, minicom, screen) are pre-installed by bootstrap.sh
+# from local RPMs before Ansible runs. No EPEL repo configuration needed.
+
+- name: Install base tools
+  ansible.builtin.dnf:
+    name:
+      - git
+      - vim
+      - curl
+      - wget
+      - jq
+      - rsync
+      - unzip
+      - tar
+      - bash-completion
+      - tmux
+      - brasero
+    state: present
+  when: install_base_tools
+
+- name: Install dev tools
+  ansible.builtin.dnf:
+    name:
+      - python3
+      - python3-pip
+      - make
+      - gcc
+      - kernel-devel
+    state: present
+  when: install_dev_tools
+
+- name: Install network tools
+  ansible.builtin.dnf:
+    name:
+      - nmap
+      - tcpdump
+      - bind-utils
+      - net-tools
+      - iproute
+      - socat
+      - iperf3
+    state: present
+  when: install_network_tools
+
+- name: Install monitoring tools
+  ansible.builtin.dnf:
+    name:
+      - htop
+      - iotop
+      - lsof
+      - strace
+    state: present
+  when: install_monitoring_tools
+
+- name: Install serial / terminal tools
+  ansible.builtin.dnf:
+    name:
+      - minicom
+      - screen
+    state: present
+  when: install_serial_tools
+
+- name: Install services (httpd, tftp-server)
+  ansible.builtin.dnf:
+    name:
+      - httpd
+      - tftp-server
+    state: present
+  when: install_services
+
+- name: Install k8s tools (kubectl)
+  ansible.builtin.dnf:
+    name: kubectl
+    state: present
+  when: install_k8s_tools
+  # Requires kubernetes repo — add repo task if using online mode.
+  # In airgap: place kubectl RPM in files/rpms/k8s/ and install via bootstrap.sh.
+
+- name: Install helm
+  ansible.builtin.get_url:
+    url: "https://get.helm.sh/helm-v{{ helm_version }}-linux-amd64.tar.gz"
+    dest: "/tmp/helm-{{ helm_version }}.tar.gz"
+    mode: "0644"
+  when: install_k8s_tools
+  register: helm_download
+
+- name: Extract and install helm
+  ansible.builtin.unarchive:
+    src: "/tmp/helm-{{ helm_version }}.tar.gz"
+    dest: /tmp/
+    remote_src: true
+  when: install_k8s_tools and helm_download is changed
+
+- name: Place helm binary
+  ansible.builtin.copy:
+    src: /tmp/linux-amd64/helm
+    dest: /usr/local/bin/helm
+    mode: "0755"
+    remote_src: true
+  when: install_k8s_tools
+
+- name: Install k9s
+  ansible.builtin.get_url:
+    url: "https://github.com/derailed/k9s/releases/download/v{{ k9s_version }}/k9s_Linux_amd64.tar.gz"
+    dest: "/tmp/k9s-{{ k9s_version }}.tar.gz"
+    mode: "0644"
+  when: install_k8s_tools
+  register: k9s_download
+
+- name: Extract and install k9s
+  ansible.builtin.unarchive:
+    src: "/tmp/k9s-{{ k9s_version }}.tar.gz"
+    dest: /usr/local/bin/
+    include: [k9s]
+    remote_src: true
+    mode: "0755"
+  when: install_k8s_tools and k9s_download is changed

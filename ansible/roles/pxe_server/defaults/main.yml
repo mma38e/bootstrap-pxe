@@ -1,0 +1,70 @@
+---
+# ── Network ───────────────────────────────────────────────────────────────────
+# IP of this server on the imaging/PXE network
+pxe_server_ip: "192.168.1.10"
+
+# IP serving HTTP content — usually the same host. Override if needed.
+http_server_ip: "{{ pxe_server_ip }}"
+
+# Host network interface dnsmasq will listen on
+dhcp_interface: "eth0"
+
+# Absolute path on the target host where the project will live
+project_dir: "/opt/pxe-server"
+
+# ── DHCP ──────────────────────────────────────────────────────────────────────
+# false = proxyDHCP (router owns DHCP; we inject PXE options only)
+# true  = standalone DHCP (this server owns address assignment)
+dhcp_enabled: false
+
+# Used only when dhcp_enabled=true
+dhcp_range_start: "192.168.1.100"
+dhcp_range_end:   "192.168.1.200"
+dhcp_lease_time:  "1h"
+dhcp_gateway:     "{{ pxe_server_ip }}"
+dhcp_dns:         "8.8.8.8,8.8.4.4"
+
+# ── OS toggles ────────────────────────────────────────────────────────────────
+# Controls ISO download, kernel extraction, and whether boot entries appear.
+ubuntu2204_enabled: true
+rocky9_enabled: true
+
+# ── Rocky Linux 9 kickstart profiles ─────────────────────────────────────────
+# Each entry requires a matching templates/kickstart/<name>.ks.j2.
+# Add extra profiles in group_vars via rocky9_extra_profiles.
+rocky9_profiles:
+  - name: rocky9
+    label: "Rocky Linux 9 (kickstart)"
+
+rocky9_extra_profiles: []
+
+# ── Ubuntu 22.04 autoinstall profiles ────────────────────────────────────────
+# The role ships with the base autoinstall profile.
+# To add profiles without modifying the role, set ubuntu2204_extra_profiles
+# in your inventory group_vars and create matching files/cloud-init/<name>/
+# directories with user-data and meta-data.
+#
+# Example group_vars/all.yml:
+#   ubuntu2204_extra_profiles:
+#     - name: ubuntu2204-custom
+#       label: "Ubuntu 22.04 LTS — custom profile"
+ubuntu2204_profiles:
+  - name: ubuntu2204
+    label: "Ubuntu 22.04 LTS (autoinstall)"
+
+ubuntu2204_extra_profiles: []
+
+# ── Upstream ISO sources ──────────────────────────────────────────────────────
+# Override to use a local mirror and avoid re-downloading on every run.
+ubuntu2204_iso_url: "https://releases.ubuntu.com/22.04/ubuntu-22.04.5-live-server-amd64.iso"
+ubuntu2204_iso_checksum: "sha256:9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0"
+
+# DVD ISO — extracted to the webroot so the installer can fetch packages locally.
+# This is ~10GB. Override to a local mirror to avoid re-downloading.
+rocky9_iso_url: "https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9.7-x86_64-dvd.iso"
+rocky9_iso_checksum: "sha256:d48e902325dce6793935b4e13672a0d9a4f958e02d4e23fcf0a8a34c49ef03da"
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+# Pin a specific Docker CE version, e.g. "5:24.0.7-1~ubuntu.22.04~jammy"
+# Leave empty to install the latest available version.
+docker_ce_version: ""

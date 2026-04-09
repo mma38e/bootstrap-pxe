@@ -1,0 +1,34 @@
+---
+# Site-specific overrides — values here take precedence over role defaults.
+
+# ── SSH ───────────────────────────────────────────────────────────────────────
+ansible_user: root
+ansible_ssh_pass: password
+ansible_ssh_extra_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+# ── Bootstrap ─────────────────────────────────────────────────────────────────
+bootstrap_admin_user: cloud
+bootstrap_project_dir: /opt/bootstrap
+
+# ── PXE — Airgap ─────────────────────────────────────────────────────────────
+# When true, ISO download tasks are skipped — ISOs are pre-staged by bootstrap.sh.
+airgap_mode: true
+
+# Directory where bootstrap.sh stages PXE client ISOs before Ansible runs.
+airgap_iso_staging_dir: /root/bootstrap/files/isos
+
+# ── PXE — Network ────────────────────────────────────────────────────────────
+# Host network interface dnsmasq will listen on
+dhcp_interface: "eth0"
+
+# Absolute path on the target host where the PXE project will live
+project_dir: "/opt/pxe-server"
+
+# ── PXE — OS toggles ─────────────────────────────────────────────────────────
+ubuntu2204_enabled: true
+rocky9_enabled: true
+
+# ── PXE — Extra profiles ─────────────────────────────────────────────────────
+rocky9_extra_profiles:
+  - name: rocky9-cockpit-server
+    label: "Rocky Linux 9 — Cockpit/Virt Server"

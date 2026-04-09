@@ -1,0 +1,96 @@
+---
+# PXE Server — Docker Compose
+#
+# Three containers:
+#   pxe-dhcp   dnsmasq — DHCP or proxyDHCP + PXE boot file announcement
+#   pxe-tftp   tftpd-hpa — serves boot files over UDP/69
+#   pxe-http   nginx — serves OS ISOs, install trees, kickstart, cloud-init
+#
+# DHCP and TFTP use network_mode: host because:
+#   - DHCP discovery is a broadcast protocol; Docker bridge NAT blocks it.
+#   - TFTP negotiates a dynamic data port; port mapping cannot track it.
+# HTTP uses a standard bridge port mapping — TCP/80 only.
+#
+# All persistent data lives under $PROJECT_DIR/data/ on the host and is
+# bind-mounted into the containers. Ansible populates this tree before
+# the stack starts.
+
+services:
+
+  dhcp:
+    build: ./containers/dhcp
+    image: pxe-dhcp:local
+    container_name: pxe-dhcp
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      DHCP_ENABLED:     "${DHCP_ENABLED:-false}"
+      PXE_SERVER_IP:    "${PXE_SERVER_IP}"
+      HTTP_SERVER_IP:   "${HTTP_SERVER_IP:-}"
+      DHCP_INTERFACE:   "${DHCP_INTERFACE:-eth0}"
+      DHCP_RANGE_START: "${DHCP_RANGE_START:-}"
+      DHCP_RANGE_END:   "${DHCP_RANGE_END:-}"
+      DHCP_LEASE_TIME:  "${DHCP_LEASE_TIME:-1h}"
+      DHCP_GATEWAY:     "${DHCP_GATEWAY:-}"
+      DHCP_DNS:         "${DHCP_DNS:-8.8.8.8}"
+    volumes:
+      - dhcp_leases:/var/lib/misc
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  tftp:
+    build: ./containers/tftp
+    image: pxe-tftp:local
+    container_name: pxe-tftp
+    network_mode: host
+    volumes:
+      - tftpboot:/tftpboot
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  http:
+    build: ./containers/http
+    image: pxe-http:local
+    container_name: pxe-http
+    ports:
+      - "80:80"
+    volumes:
+      - webroot:/var/www/html:ro
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  dhcp_leases:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: "${PROJECT_DIR}/data/dhcp-leases"
+
+  tftpboot:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: "${PROJECT_DIR}/data/tftpboot"
+
+  webroot:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: "${PROJECT_DIR}/data/webroot"

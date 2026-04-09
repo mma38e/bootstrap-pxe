@@ -1,0 +1,24 @@
+---
+- name: restart dhcp container
+  community.docker.docker_container:
+    name: pxe-dhcp
+    image: pxe-dhcp:local
+    state: started
+    restart: true
+  listen: restart dhcp container
+
+- name: restart tftp container
+  community.docker.docker_container:
+    name: pxe-tftp
+    image: pxe-tftp:local
+    state: started
+    restart: true
+  listen: restart tftp container
+
+- name: restart http container
+  community.docker.docker_container:
+    name: pxe-http
+    image: pxe-http:local
+    state: started
+    restart: true
+  listen: restart http container

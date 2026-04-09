@@ -1,0 +1,32 @@
+---
+# Build container images and bring the stack up.
+
+- name: Debug - list src directory contents
+  shell: "find {{ project_dir }}/src/ -maxdepth 2 -type f | head -20"
+  register: src_contents
+  changed_when: false
+
+- name: Debug - show src contents
+  debug:
+    var: src_contents.stdout_lines
+
+- name: Check if PXE container images exist
+  community.docker.docker_image_info:
+    name: "{{ item }}"
+  loop:
+    - pxe-dhcp:local
+    - pxe-tftp:local
+    - pxe-http:local
+  register: pxe_images
+
+- name: Build PXE server container images
+  community.docker.docker_compose_v2:
+    project_src: "{{ project_dir }}/src"
+    build: always
+    state: present
+  when: pxe_images.results | selectattr('images', 'equalto', []) | list | length > 0
+
+- name: Ensure PXE stack is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ project_dir }}/src"
+    state: present
