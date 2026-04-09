@@ -22,9 +22,18 @@
   import_tasks: services.yml
   tags: [services]
 
-- name: Deploy MOTD
+- name: Deploy login info script
   ansible.builtin.template:
     src: motd.j2
+    dest: /etc/profile.d/bootstrap-motd.sh
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [motd]
+
+- name: Clear static /etc/motd
+  ansible.builtin.copy:
+    content: ""
     dest: /etc/motd
     owner: root
     group: root

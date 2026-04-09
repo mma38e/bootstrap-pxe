@@ -4,6 +4,8 @@
 - name: Create admin user
   ansible.builtin.user:
     name: "{{ bootstrap_admin_user }}"
+    password: "{{ bootstrap_admin_password | password_hash('sha512') }}"
+    update_password: on_create   # only set on first creation; preserves manual changes
     groups: "{{ bootstrap_admin_groups }}"
     append: true
     shell: /bin/bash

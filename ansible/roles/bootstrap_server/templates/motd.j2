@@ -1,17 +1,44 @@
-===========================================================
-  Bootstrap Server — {{ ansible_hostname }}
-===========================================================
-  IP:       {{ ansible_default_ipv4.address | default('unknown') }}
-  OS:       {{ ansible_distribution }} {{ ansible_distribution_version }}
-  Kernel:   {{ ansible_kernel }}
-  Uptime:   {{ ansible_uptime_seconds | int // 3600 }}h {{ (ansible_uptime_seconds | int % 3600) // 60 }}m
+#!/bin/bash
+# /etc/profile.d/bootstrap-motd.sh
+# Displayed at every interactive login — values computed at login time.
+# Managed by Ansible (bootstrap_server role). Do not edit manually.
 
-  Docker:   {{ 'running' if ansible_facts.services['docker.service'] is defined else 'check status' }}
+IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+UPTIME=$(uptime -p 2>/dev/null || echo "unknown")
+KERNEL=$(uname -r)
+OS=$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME}" || echo "unknown")
+DOCKER=$(systemctl is-active docker 2>/dev/null || echo "inactive")
+COCKPIT=$(systemctl is-active cockpit.socket 2>/dev/null || echo "inactive")
 
-  Role:     Ansible Controller / Bootstrap Node
-===========================================================
-  Useful commands:
-    docker ps              — list running containers
-    cd /root/bootstrap     — bootstrap artifacts
-    /opt/bootstrap/        — project data directory
-===========================================================
+echo "==========================================================="
+echo "  Bootstrap Server — $(hostname -s)"
+echo "==========================================================="
+printf "  IP:       %s\n" "${IP:-unknown}"
+printf "  OS:       %s\n" "${OS}"
+printf "  Kernel:   %s\n" "${KERNEL}"
+printf "  Uptime:   %s\n" "${UPTIME}"
+echo ""
+printf "  Docker:   %s\n" "${DOCKER}"
+printf "  Cockpit:  %s\n" "${COCKPIT}"
+echo ""
+echo "  Role:     Ansible Controller / Bootstrap Node"
+echo "==========================================================="
+echo "  Useful commands:"
+echo "    docker ps              — list running containers"
+echo "    cd /root/bootstrap     — bootstrap artifacts"
+echo "    /opt/bootstrap/        — project data directory"
+echo "==========================================================="
+echo "  Post-Setup Quick Reference"
+echo "==========================================================="
+echo "  Change admin password (default is 'password'):"
+echo "    passwd {{ bootstrap_admin_user }}"
+echo ""
+{% if cockpit_enabled | bool %}
+echo "  Cockpit web console:"
+echo "    https://${IP:-this-host}:9090"
+echo ""
+echo "  Switch to graphical target (optional, requires reboot):"
+echo "    systemctl set-default graphical.target && reboot"
+echo ""
+{% endif %}
+echo "==========================================================="

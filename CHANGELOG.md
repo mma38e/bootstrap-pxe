@@ -5,6 +5,31 @@ Format: `- <type>: <description>` — types: `add`, `fix`, `change`, `remove`
 
 ---
 
+## [1.1.0] — 2026-04-09
+
+### Added
+- add: `bootstrap_admin_password` variable in `bootstrap_server/defaults/main.yml`
+  (default `"password"`). Set via group_vars or vault. Password is applied with
+  `update_password: on_create` so re-running the playbook never resets a manually
+  changed password.
+- add: `install_cockpit` / `cockpit_enabled` toggle in `bootstrap_server/defaults/main.yml`
+  (default `true`). Enables `cockpit.socket` and opens firewall port 9090.
+- add: cockpit tasks and handler to `bootstrap_server/tasks/services.yml` and
+  `handlers/main.yml`.
+- add: `/etc/profile.d/bootstrap-motd.sh` — replaces static `/etc/motd` with a bash
+  script that computes hostname, IP, uptime, Docker and Cockpit status at login time.
+  Includes post-setup quick reference (password change, Cockpit URL, graphical target).
+- add: developer rule #10 in AGENTS.md: all new `defaults/main.yml` variables must be
+  documented in `README.md`.
+
+### Changed
+- change: `bootstrap.sh` completion message now prints next steps (change password,
+  Cockpit URL, optional graphical target switch).
+- change: `tasks/main.yml` deploys `motd.j2` to `/etc/profile.d/bootstrap-motd.sh`
+  (mode 0755) and clears `/etc/motd` so the dynamic script runs at interactive login.
+
+---
+
 ## [1.0.0] — 2026-04-08
 
 Combined `bootstrap-server` and `pxe-server` into a single repository.
