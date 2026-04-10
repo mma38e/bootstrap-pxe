@@ -62,7 +62,7 @@ confirm() {
 
 step "Checking required tools"
 
-REQUIRED_TOOLS=(xorriso implantisomd5 curl openssl python3 docker)
+REQUIRED_TOOLS=(xorriso implantisomd5 curl openssl python3 docker rsync)
 MISSING=()
 for tool in "${REQUIRED_TOOLS[@]}"; do
     if ! command -v "${tool}" &>/dev/null; then
@@ -72,7 +72,7 @@ done
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
     die "Missing required tools: ${MISSING[*]}
-  Install with: dnf install xorriso isomd5sum curl python3
+  Install with: dnf install xorriso isomd5sum curl python3 rsync
   Docker must be installed separately."
 fi
 
@@ -372,9 +372,9 @@ if [[ -d "${SCRIPT_DIR}/ansible" ]]; then
     cp -r "${SCRIPT_DIR}/ansible" "${ISO_WORK}/ansible"
 fi
 
-# Inject files (RPMs + images + PXE ISOs)
+# Inject files (RPMs + images — PXE client ISOs are NOT embedded; too large for ISO 9660)
 log "Copying files/ (RPMs + images — this may take several minutes)..."
-cp -r "${FILES_DIR}" "${ISO_WORK}/files"
+rsync -a --exclude='isos/' "${FILES_DIR}/" "${ISO_WORK}/files/"
 
 # Inject PXE containers and docker-compose
 log "Copying containers/ and docker-compose.yml..."
@@ -523,7 +523,32 @@ echo "  File:   ${OUTPUT_ISO}"
 echo "  Size:   ${ISO_SIZE}"
 echo "  SHA256: ${ISO_SHA}"
 echo ""
-echo "  Boot this ISO on the target machine."
-echo "  The kickstart will run automatically."
-echo "  After reboot: cd /root/bootstrap && ./bootstrap.sh"
+echo "  ── Airgap Transfer Checklist ──────────"
+echo ""
+echo "  [1] Bootstrap ISO  (write to USB or burn to disc)"
+echo "      ${OUTPUT_ISO}"
+echo ""
+echo "  [2] PXE client ISOs  (copy to a separate USB drive or"
+echo "      alongside the bootstrap ISO if space allows)"
+if [[ -d "${PXE_ISO_DIR}" ]] && compgen -G "${PXE_ISO_DIR}/*.iso" > /dev/null 2>&1; then
+    for f in "${PXE_ISO_DIR}"/*.iso; do
+        echo "      ${f}  ($(du -sh "${f}" | cut -f1))"
+    done
+    echo ""
+    echo "      On the target machine after install, place these at:"
+    echo "        /root/bootstrap/files/isos/"
+    echo "      then run: ./bootstrap.sh"
+else
+    echo "      (none downloaded — PXE client ISOs were skipped)"
+    echo "      To add them later, re-run build-iso.sh and answer [y]"
+    echo "      to the PXE client ISO prompt, then transfer the files"
+    echo "      in ${PXE_ISO_DIR}/ to /root/bootstrap/files/isos/"
+    echo "      on the target machine before running bootstrap.sh"
+fi
+echo ""
+echo "  ── First-boot steps ───────────────────"
+echo "  1. Boot the target machine from the ISO"
+echo "  2. Kickstart runs automatically — no interaction needed"
+echo "  3. After reboot:"
+echo "       cd /root/bootstrap && ./bootstrap.sh"
 echo "=========================================="
