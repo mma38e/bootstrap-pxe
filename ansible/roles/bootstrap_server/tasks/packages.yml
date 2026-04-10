@@ -17,6 +17,7 @@
       - bash-completion
       - tmux
       - brasero
+      - k3b
     state: present
   when: install_base_tools
 

@@ -225,11 +225,11 @@ step "EPEL packages (htop, iotop, iperf3, minicom, screen + deps)"
 
 # Download EPEL RPMs using dnf on the build machine.
 # This resolves all dependencies automatically.
-EPEL_PKGS=(htop iotop iperf3 minicom screen)
+EPEL_PKGS=(htop iotop iperf3 minicom screen k3b)
 
 log "Downloading EPEL packages and dependencies..."
 dnf download --resolve --destdir="${RPM_DIR}/epel" \
-    --repo=epel --repo=baseos --repo=appstream \
+    --repo=epel --repo=baseos --repo=appstream --repo=crb \
     "${EPEL_PKGS[@]}" 2>&1 | tail -5
 
 log "EPEL packages ready: $(ls "${RPM_DIR}"/epel/*.rpm 2>/dev/null | wc -l) RPMs"
