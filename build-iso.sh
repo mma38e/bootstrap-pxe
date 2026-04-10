@@ -399,7 +399,7 @@ label bootstrap
   menu label ^Bootstrap Server Install (Kickstart)
   menu default
   kernel vmlinuz
-  append initrd=initrd.img inst.stage2=hd:LABEL=Rocky-9-7-x86_64-dvd inst.ks=cdrom:/bootstrap.ks quiet
+  append initrd=initrd.img inst.stage2=hd:LABEL=Rocky-9-7-x86_64-dvd inst.stage2=cdrom inst.ks=cdrom:/bootstrap.ks quiet
 
 ISOL
 )
@@ -442,7 +442,7 @@ if [[ -f "${GRUB_CFG}" ]]; then
     GRUB_ENTRY=$(cat <<'GRUB'
 
 menuentry 'Bootstrap Server Install (Kickstart)' --class fedora --class gnu-linux --class gnu --class os {
-    linuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=Rocky-9-7-x86_64-dvd inst.ks=cdrom:/bootstrap.ks quiet
+    linuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=Rocky-9-7-x86_64-dvd inst.stage2=cdrom inst.ks=cdrom:/bootstrap.ks quiet
     initrdefi /images/pxeboot/initrd.img
 }
 
