@@ -22,8 +22,8 @@ selinux --enforcing
 firewall --enabled --service=ssh
 
 # ── Disk ──────────────────────────────────────────────────────────────────────
-zerombr
-clearpart --all --initlabel
+%include /tmp/disk.ks
+
 part /boot      --fstype=xfs  --size=1024
 part /boot/efi  --fstype=efi  --size=512
 part pv.01      --grow        --size=1
@@ -129,6 +129,45 @@ echo ""
 sleep 2
 
 echo "network --bootproto=static --device=${IFACE} --noipv6 --hostname=${HOSTSHORT} --gateway=${GATEWAY} --ip=${IP} --netmask=${NETMASK} --onboot=yes --activate ${DNS_CLAUSE}" > /tmp/network.ks
+
+chvt 1
+exec < /dev/tty1 > /dev/tty1 2> /dev/tty1
+
+# ── Disk selection ────────────────────────────────────────────────────────────
+exec < /dev/tty6 > /dev/tty6 2> /dev/tty6
+chvt 6
+
+echo ""
+echo "=========================================="
+echo "  Bootstrap Server — Disk Selection"
+echo "=========================================="
+echo ""
+echo "Available disks:"
+lsblk -d -o NAME,SIZE,MODEL --nodeps | grep -v "^loop\|^sr" | awk 'NR==1{print "  "$0} NR>1{print "  /dev/"$0}'
+echo ""
+
+TARGET_DISK=""
+while [ -z "$TARGET_DISK" ]; do
+    read -p "Install target disk (e.g. sda, nvme0n1): " TARGET_DISK
+    if [ ! -b "/dev/${TARGET_DISK}" ]; then
+        echo "  Not found: /dev/${TARGET_DISK} — try again"
+        TARGET_DISK=""
+    fi
+done
+
+echo ""
+echo "WARNING: /dev/${TARGET_DISK} will be wiped. All data will be lost."
+read -p "Type 'yes' to confirm: " CONFIRM
+if [ "$CONFIRM" != "yes" ]; then
+    echo "Aborted."
+    sleep 9999
+fi
+
+cat > /tmp/disk.ks <<DISKEOF
+ignoredisk --only-use=${TARGET_DISK}
+zerombr
+clearpart --all --initlabel --drives=${TARGET_DISK}
+DISKEOF
 
 chvt 1
 exec < /dev/tty1 > /dev/tty1 2> /dev/tty1
