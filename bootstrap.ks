@@ -3,7 +3,7 @@
 # This file is injected into the ISO by build-iso.sh.
 # Do not edit the copy inside the ISO directly; edit this source file and rebuild.
 
-cdrom
+harddrive --partition=LABEL=__VOLUME_ID__ --dir=/
 text
 reboot
 

@@ -353,6 +353,20 @@ chmod -R u+w "${ISO_WORK}/"
 
 log "ISO extracted to ${ISO_WORK}/"
 
+# ── Detect Volume ID ──────────────────────────────────────────────────────────
+# Must happen before artifact injection so the kickstart token can be replaced.
+
+log "Reading original ISO metadata..."
+VOLUME_ID=$(xorriso -indev "${ROCKY_ISO}" -pvd_info 2>&1 | grep "^Volume Id" | sed 's/^Volume Id[[:space:]]*:[[:space:]]*//' | tr -d ' ')
+if [[ -z "${VOLUME_ID}" ]]; then
+    VOLUME_ID=$(xorriso -indev "${ROCKY_ISO}" -report_system_area plain 2>&1 | grep -i "volume id" | head -1 | awk -F: '{print $2}' | xargs)
+fi
+if [[ -z "${VOLUME_ID}" ]]; then
+    VOLUME_ID="Rocky-9-7-x86_64-dvd"
+    log "Could not detect Volume ID, using default: ${VOLUME_ID}"
+fi
+log "Volume ID: ${VOLUME_ID}"
+
 # ── Inject bootstrap artifacts ────────────────────────────────────────────────
 
 step "Injecting bootstrap artifacts"
@@ -360,7 +374,10 @@ step "Injecting bootstrap artifacts"
 # Inject kickstart with password hash substituted
 log "Processing kickstart file..."
 KS_INJECTED="${ISO_WORK}/bootstrap.ks"
-sed "s|__ROOT_PW_HASH__|${ROOT_PW_HASH}|g" "${KS_FILE}" > "${KS_INJECTED}"
+sed \
+    -e "s|__ROOT_PW_HASH__|${ROOT_PW_HASH}|g" \
+    -e "s|__VOLUME_ID__|${VOLUME_ID}|g" \
+    "${KS_FILE}" > "${KS_INJECTED}"
 
 # Inject bootstrap.sh
 log "Copying bootstrap.sh..."
@@ -393,13 +410,13 @@ ISOLINUX_CFG="${ISO_WORK}/isolinux/isolinux.cfg"
 if [[ -f "${ISOLINUX_CFG}" ]]; then
     log "Patching isolinux/isolinux.cfg..."
     # Prepend our entry and set default timeout
-    ISOLINUX_ENTRY=$(cat <<'ISOL'
+    ISOLINUX_ENTRY=$(cat <<ISOL
 
 label bootstrap
   menu label ^Bootstrap Server Install (Kickstart)
   menu default
   kernel vmlinuz
-  append initrd=initrd.img inst.stage2=hd:LABEL=Rocky-9-7-x86_64-dvd inst.ks=cdrom:/bootstrap.ks quiet
+  append initrd=initrd.img inst.stage2=hd:LABEL=${VOLUME_ID} inst.ks=cdrom:/bootstrap.ks quiet
 
 ISOL
 )
@@ -439,10 +456,10 @@ fi
 
 if [[ -f "${GRUB_CFG}" ]]; then
     log "Patching EFI/BOOT/grub.cfg..."
-    GRUB_ENTRY=$(cat <<'GRUB'
+    GRUB_ENTRY=$(cat <<GRUB
 
 menuentry 'Bootstrap Server Install (Kickstart)' --class fedora --class gnu-linux --class gnu --class os {
-    linuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=Rocky-9-7-x86_64-dvd inst.ks=cdrom:/bootstrap.ks quiet
+    linuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=${VOLUME_ID} inst.ks=cdrom:/bootstrap.ks quiet
     initrdefi /images/pxeboot/initrd.img
 }
 
@@ -474,20 +491,7 @@ log "Boot menus updated"
 
 step "Repackaging ISO"
 
-# Read original ISO volume ID using xorriso
-log "Reading original ISO metadata..."
-VOLUME_ID=$(xorriso -indev "${ROCKY_ISO}" -pvd_info 2>&1 | grep "^Volume Id" | sed 's/^Volume Id[[:space:]]*:[[:space:]]*//' | tr -d ' ')
-if [[ -z "${VOLUME_ID}" ]]; then
-    # Fallback: extract from xorriso report format
-    VOLUME_ID=$(xorriso -indev "${ROCKY_ISO}" -report_system_area plain 2>&1 | grep -i "volume id" | head -1 | awk -F: '{print $2}' | xargs)
-fi
-if [[ -z "${VOLUME_ID}" ]]; then
-    VOLUME_ID="Rocky-9-7-x86_64-dvd"
-    log "Could not detect Volume ID, using default: ${VOLUME_ID}"
-fi
-log "Volume ID: ${VOLUME_ID}"
-
-log "Building new ISO..."
+log "Building new ISO (Volume ID: ${VOLUME_ID})..."
 xorriso -as mkisofs \
     -o "${OUTPUT_ISO}" \
     -V "${VOLUME_ID}" \
