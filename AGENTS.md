@@ -199,3 +199,8 @@ Galaxy collections pre-installed). Invoked via `docker run` in `bootstrap.sh`.
 
 9. **Keep it simple** — prefer the simplest approach that works. Follow proven
    patterns. Simple, readable code is always preferred over clever abstractions.
+
+10. **Document every new variable** — any variable added to `defaults/main.yml`
+    must appear in `README.md` under the Configuration table with its default
+    value and purpose. This keeps the README the single source of truth for
+    operators customising the deployment.

@@ -107,9 +107,13 @@ cd /root/bootstrap
 ```
 
 This installs Docker, loads all container images, and runs both Ansible roles.
-A successful run ends with `Bootstrap + PXE server setup complete.`
+On completion it prints next steps:
 
-PXE clients can now network boot from this server.
+1. **Change the admin password** (default is `password`): `passwd cloud`
+2. **Open Cockpit**: `https://<IP>:9090`
+3. **Switch to GUI** (optional): `systemctl set-default graphical.target && reboot`
+
+Log out and back in to see the dynamic login banner with current system state.
 
 ---
 
@@ -119,13 +123,16 @@ PXE clients can now network boot from this server.
 
 Override in `ansible/group_vars/all.yml` or via `-e` flags:
 
-| Variable | Default | What it installs |
+| Variable | Default | What it installs / does |
 |---|---|---|
+| `bootstrap_admin_user` | `cloud` | Admin username created by Ansible |
+| `bootstrap_admin_password` | `password` | Default password — **change in group_vars or vault** |
 | `install_base_tools` | `true` | git, vim, curl, wget, jq, rsync, tmux, unzip |
 | `install_dev_tools` | `true` | python3, pip, make, gcc, kernel-devel |
 | `install_network_tools` | `true` | nmap, tcpdump, bind-utils, socat, iperf3 |
 | `install_monitoring_tools` | `true` | htop, iotop, lsof, strace |
 | `install_serial_tools` | `true` | minicom, screen |
+| `install_cockpit` | `true` | Enable cockpit.socket + firewall port 9090 |
 | `install_k8s_tools` | `false` | kubectl, helm, k9s |
 
 ### PXE server variables

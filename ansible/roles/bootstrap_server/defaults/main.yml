@@ -4,6 +4,7 @@
 
 # ── Admin user ────────────────────────────────────────────────────────────────
 bootstrap_admin_user: "cloud"
+bootstrap_admin_password: "password"   # default — override in group_vars or vault
 bootstrap_admin_groups:
   - docker
   - wheel
@@ -49,6 +50,11 @@ docker_service_state: started
 docker_service_enabled: true
 
 # ── Services ──────────────────────────────────────────────────────────────────
+install_cockpit: true
+# cockpit.socket + firewall port 9090 — cockpit-machines is already installed
+# by the kickstart, so this just enables the service.
+
+cockpit_enabled: "{{ install_cockpit }}"
 httpd_enabled: "{{ install_services }}"
 tftp_enabled: "{{ install_services }}"
 

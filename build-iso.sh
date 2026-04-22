@@ -2,7 +2,7 @@
 # build-iso.sh — Build a custom Rocky Linux 9.7 Bootstrap + PXE Server ISO
 #
 # Prerequisites (internet-connected machine):
-#   dnf install xorriso isomd5sum curl python3
+#   dnf install xorriso isomd5sum curl python3 rsync
 #   Docker must be installed and running (for docker pull/save/build)
 #
 # Usage:
@@ -49,20 +49,15 @@ PXE_ISO_DIR="${FILES_DIR}/isos"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-log()     { echo "[build-iso] $*"; }
-step()    { echo ""; echo "[build-iso] ── $* ──────────────────────────────────────────"; }
-die()     { echo "[build-iso] ERROR: $*" >&2; exit 1; }
-confirm() {
-    local prompt="$1"
-    read -rp "${prompt} [y/N] " answer
-    [[ "${answer,,}" == "y" ]] || die "Aborted by user"
-}
+log()  { echo "[build-iso] $*"; }
+step() { echo ""; echo "[build-iso] ── $* ──────────────────────────────────────────"; }
+die()  { echo "[build-iso] ERROR: $*" >&2; exit 1; }
 
 # ── Preflight: tool check ─────────────────────────────────────────────────────
 
 step "Checking required tools"
 
-REQUIRED_TOOLS=(xorriso implantisomd5 curl openssl python3 docker)
+REQUIRED_TOOLS=(xorriso implantisomd5 curl openssl python3 docker rsync)
 MISSING=()
 for tool in "${REQUIRED_TOOLS[@]}"; do
     if ! command -v "${tool}" &>/dev/null; then
@@ -72,7 +67,7 @@ done
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
     die "Missing required tools: ${MISSING[*]}
-  Install with: dnf install xorriso isomd5sum curl python3
+  Install with: dnf install xorriso isomd5sum curl python3 rsync
   Docker must be installed separately."
 fi
 
@@ -96,10 +91,12 @@ fi
 
 log "Disk space OK"
 
-# ── Prompt: admin password ────────────────────────────────────────────────────
+# ── Gather all inputs ─────────────────────────────────────────────────────────
+# All interactive prompts are collected here before any downloads begin.
 
-step "Root password setup"
+step "Configuration"
 
+# Root password
 echo "Enter the root password for the bootstrap server."
 echo "This will be hashed with SHA-512 and embedded in the kickstart."
 echo ""
@@ -119,17 +116,30 @@ log "Generating SHA-512 password hash..."
 ROOT_PW_HASH=$(openssl passwd -6 "${ROOT_PASS}")
 ROOT_PASS=""
 ROOT_PASS2=""
-
 log "Password hash generated"
 
-# ── Prompt: ansible-runner image ──────────────────────────────────────────────
+echo ""
 
-step "ansible-runner image"
-
+# ansible-runner image
 echo "ansible-runner image to embed [${ANSIBLE_IMAGE}]: "
 read -rp "> " INPUT_IMAGE
 [[ -n "${INPUT_IMAGE}" ]] && ANSIBLE_IMAGE="${INPUT_IMAGE}"
 log "Using image: ${ANSIBLE_IMAGE}"
+
+echo ""
+
+# PXE client ISOs
+echo "Download PXE client ISOs? (served to machines that network-boot from this server)"
+echo "  - Ubuntu 22.04 Live Server  (~2 GB)"
+echo "  - Rocky Linux 9 DVD         (~10 GB)"
+echo ""
+echo "  Note: ISOs are NOT embedded in the bootstrap ISO (too large for ISO 9660)."
+echo "  They are downloaded alongside it and must be transferred to the airgap"
+echo "  machine separately. See the transfer checklist printed at the end."
+echo ""
+read -rp "Download PXE client ISOs? [y/N] " INCLUDE_PXE_ISOS
+
+log "Inputs collected — starting build"
 
 # ── Download: Rocky ISO ───────────────────────────────────────────────────────
 
@@ -248,18 +258,17 @@ mkdir -p "${IMAGE_DIR}"
 IMAGE_TAR="${IMAGE_DIR}/ansible-runner.tar"
 
 if [[ -f "${IMAGE_TAR}" ]]; then
-    log "Image tarball already exists: ${IMAGE_TAR}"
-    confirm "Re-pull and overwrite?"
+    log "Image tarball already exists — skipping pull (delete ${IMAGE_TAR} to force re-pull)"
+else
+    log "Pulling ${ANSIBLE_IMAGE}..."
+    docker pull "${ANSIBLE_IMAGE}"
+
+    log "Saving to ${IMAGE_TAR}..."
+    docker save "${ANSIBLE_IMAGE}" > "${IMAGE_TAR}"
+
+    IMAGE_SIZE=$(du -sh "${IMAGE_TAR}" | cut -f1)
+    log "Image saved: ${IMAGE_SIZE}"
 fi
-
-log "Pulling ${ANSIBLE_IMAGE}..."
-docker pull "${ANSIBLE_IMAGE}"
-
-log "Saving to ${IMAGE_TAR}..."
-docker save "${ANSIBLE_IMAGE}" > "${IMAGE_TAR}"
-
-IMAGE_SIZE=$(du -sh "${IMAGE_TAR}" | cut -f1)
-log "Image saved: ${IMAGE_SIZE}"
 
 # ── Build & save PXE container images ────────────────────────────────────────
 
@@ -268,29 +277,21 @@ step "PXE container images"
 PXE_TAR="${IMAGE_DIR}/pxe-images.tar"
 
 if [[ -f "${PXE_TAR}" ]]; then
-    log "PXE images tarball already exists: ${PXE_TAR}"
-    confirm "Rebuild and overwrite?"
+    log "PXE images tarball already exists — skipping build (delete ${PXE_TAR} to force rebuild)"
+else
+    log "Building PXE containers (docker compose build)..."
+    (cd "${SCRIPT_DIR}" && docker compose build 2>&1 | tail -5)
+
+    log "Saving pxe-dhcp:local pxe-tftp:local pxe-http:local..."
+    docker save pxe-dhcp:local pxe-tftp:local pxe-http:local -o "${PXE_TAR}"
+
+    PXE_TAR_SIZE=$(du -sh "${PXE_TAR}" | cut -f1)
+    log "PXE images saved: ${PXE_TAR_SIZE}"
 fi
-
-log "Building PXE containers (docker compose build)..."
-(cd "${SCRIPT_DIR}" && docker compose build 2>&1 | tail -5)
-
-log "Saving pxe-dhcp:local pxe-tftp:local pxe-http:local..."
-docker save pxe-dhcp:local pxe-tftp:local pxe-http:local -o "${PXE_TAR}"
-
-PXE_TAR_SIZE=$(du -sh "${PXE_TAR}" | cut -f1)
-log "PXE images saved: ${PXE_TAR_SIZE}"
 
 # ── Download PXE client ISOs (optional) ──────────────────────────────────────
 
 step "PXE client ISOs"
-
-echo "Include PXE client ISOs in the bootstrap ISO?"
-echo "These are the OS images served to machines that PXE boot from this server."
-echo "  - Ubuntu 22.04 Live Server (~2 GB)"
-echo "  - Rocky Linux 9 DVD (~10 GB)"
-echo ""
-read -rp "Download PXE client ISOs? [y/N] " INCLUDE_PXE_ISOS
 
 if [[ "${INCLUDE_PXE_ISOS,,}" == "y" ]]; then
     mkdir -p "${PXE_ISO_DIR}"
@@ -331,7 +332,7 @@ if [[ "${INCLUDE_PXE_ISOS,,}" == "y" ]]; then
 
     log "PXE client ISOs ready"
 else
-    log "Skipping PXE client ISOs — they can be added later to the target machine"
+    log "Skipping PXE client ISOs — see transfer checklist at end of build"
 fi
 
 # ── Extract Rocky ISO ─────────────────────────────────────────────────────────
@@ -372,9 +373,9 @@ if [[ -d "${SCRIPT_DIR}/ansible" ]]; then
     cp -r "${SCRIPT_DIR}/ansible" "${ISO_WORK}/ansible"
 fi
 
-# Inject files (RPMs + images + PXE ISOs)
+# Inject files (RPMs + images — PXE client ISOs are NOT embedded; too large for ISO 9660)
 log "Copying files/ (RPMs + images — this may take several minutes)..."
-cp -r "${FILES_DIR}" "${ISO_WORK}/files"
+rsync -a --exclude='isos/' "${FILES_DIR}/" "${ISO_WORK}/files/"
 
 # Inject PXE containers and docker-compose
 log "Copying containers/ and docker-compose.yml..."
@@ -523,7 +524,32 @@ echo "  File:   ${OUTPUT_ISO}"
 echo "  Size:   ${ISO_SIZE}"
 echo "  SHA256: ${ISO_SHA}"
 echo ""
-echo "  Boot this ISO on the target machine."
-echo "  The kickstart will run automatically."
-echo "  After reboot: cd /root/bootstrap && ./bootstrap.sh"
+echo "  ── Airgap Transfer Checklist ──────────"
+echo ""
+echo "  [1] Bootstrap ISO  (write to USB or burn to disc)"
+echo "      ${OUTPUT_ISO}"
+echo ""
+echo "  [2] PXE client ISOs  (copy to a separate USB drive or"
+echo "      alongside the bootstrap ISO if space allows)"
+if [[ -d "${PXE_ISO_DIR}" ]] && compgen -G "${PXE_ISO_DIR}/*.iso" > /dev/null 2>&1; then
+    for f in "${PXE_ISO_DIR}"/*.iso; do
+        echo "      ${f}  ($(du -sh "${f}" | cut -f1))"
+    done
+    echo ""
+    echo "      On the target machine after install, place these at:"
+    echo "        /root/bootstrap/files/isos/"
+    echo "      then run: ./bootstrap.sh"
+else
+    echo "      (none downloaded — PXE client ISOs were skipped)"
+    echo "      To add them later, re-run build-iso.sh and answer [y]"
+    echo "      to the PXE client ISO prompt, then transfer the files"
+    echo "      in ${PXE_ISO_DIR}/ to /root/bootstrap/files/isos/"
+    echo "      on the target machine before running bootstrap.sh"
+fi
+echo ""
+echo "  ── First-boot steps ───────────────────"
+echo "  1. Boot the target machine from the ISO"
+echo "  2. Kickstart runs automatically — no interaction needed"
+echo "  3. After reboot:"
+echo "       cd /root/bootstrap && ./bootstrap.sh"
 echo "=========================================="

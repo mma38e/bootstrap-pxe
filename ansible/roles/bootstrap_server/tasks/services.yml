@@ -39,3 +39,19 @@
     name: sshd
     enabled: true
     state: started
+
+- name: Enable cockpit socket
+  ansible.builtin.systemd:
+    name: cockpit.socket
+    enabled: true
+    state: started
+  when: cockpit_enabled | bool
+
+- name: Open firewall for cockpit (port 9090)
+  ansible.posix.firewalld:
+    service: cockpit
+    permanent: true
+    state: enabled
+    immediate: true
+  when: cockpit_enabled | bool
+  ignore_errors: true
