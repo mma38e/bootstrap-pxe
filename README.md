@@ -60,12 +60,11 @@ The resulting ISO is self-contained — no internet access is needed on the targ
 
 ## Prerequisites
 
-### On the internet-connected machine (for `build-iso.sh`)
+### On the internet-connected machine (for `build.sh`)
 
-```bash
-dnf install xorriso isomd5sum curl python3
-# Docker must be installed and running
-```
+Only **Docker** is required on the host — `build.sh` runs the build inside a
+containerized builder, so `xorriso`, `isomd5sum`, and the rest are installed
+*inside* the container, not on the host.
 
 Required disk space: **≥ 50 GB** (more if including PXE client ISOs).
 
@@ -84,8 +83,15 @@ Required disk space: **≥ 50 GB** (more if including PXE client ISOs).
 ```bash
 git clone <this-repo>
 cd bootstrap-pxe
-./build-iso.sh
+./build.sh
 ```
+
+`build.sh` builds a local Rocky 9 + DinD builder image and runs `build-iso.sh`
+inside it. Don't invoke `build-iso.sh` directly — it expects `xorriso`,
+`implantisomd5`, and a Linux Docker stack on the host PATH, which is rarely the
+case (especially on macOS). The builder's image cache persists in the named
+Docker volume `bootstrap-pxe-builder-cache` so `ansible-runner` isn't re-pulled
+on every run.
 
 The script will prompt for:
 - Root password (hashed with SHA-512, embedded in kickstart)
@@ -168,7 +174,10 @@ Use `--tags packages`, `--tags pxe`, etc. to target specific stages.
 
 ```
 bootstrap-pxe/
-├── build-iso.sh              Online ISO build script
+├── build.sh                  Top-level entry — builds the builder, runs build-iso.sh inside
+├── build-iso.sh              Online ISO build script (runs inside the builder container)
+├── Dockerfile                Builder image (Rocky 9 + DinD + xorriso + isomd5sum + docker)
+├── docker-entrypoint.sh      Boots dockerd inside the builder, then execs build-iso.sh
 ├── bootstrap.ks              Rocky 9.7 kickstart (injected into ISO)
 ├── bootstrap.sh              Post-install (Docker + images + run Ansible)
 ├── docker-compose.yml        PXE container stack definition

@@ -5,6 +5,28 @@ Format: `- <type>: <description>` — types: `add`, `fix`, `change`, `remove`
 
 ---
 
+## [1.2.0] — 2026-04-25
+
+### Added
+- add: `Dockerfile` at repo root — Rocky 9 + DinD builder image with `xorriso`,
+  `isomd5sum`, `docker-ce`, `docker-compose-plugin`, and `docker-buildx-plugin`.
+  Replaces the requirement to install ISO build tooling on the host.
+- add: `docker-entrypoint.sh` — boots `dockerd` with `overlay2` inside the
+  builder container, waits for readiness, then execs `build-iso.sh`.
+- add: `build.sh` — top-level wrapper that builds the local builder image and
+  runs `build-iso.sh` inside it (`--privileged`, named volume
+  `bootstrap-pxe-builder-cache` for `/var/lib/docker` to persist image cache
+  between local runs). New supported entry point for ISO builds.
+- add: `.dockerignore` — limits the build context to `Dockerfile` +
+  `docker-entrypoint.sh`; keeps the context under 1 KB.
+
+### Changed
+- change: `README.md` — Prerequisites now requires only Docker on the host;
+  Step 1 documents `./build.sh` as the entry point; Repository Structure
+  reflects the new files.
+
+---
+
 ## [1.1.0] — 2026-04-09
 
 ### Added

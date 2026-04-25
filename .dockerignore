@@ -1,0 +1,14 @@
+work/
+files/
+*.iso
+.git/
+ansible/
+containers/
+docker-compose.yml
+README.md
+CHANGELOG.md
+AGENTS.md
+build.sh
+build-iso.sh
+bootstrap.sh
+bootstrap.ks

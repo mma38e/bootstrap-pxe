@@ -22,10 +22,20 @@ single project with two Ansible roles.
 ```
 bootstrap-pxe/
 │
-├── build-iso.sh          ← ONLINE PREP: run on internet-connected machine
-│                           Downloads Rocky ISO + deps, builds PXE containers,
-│                           optionally downloads PXE client ISOs, repackages
-│                           into a custom bootable ISO.
+├── build.sh              ← ENTRY POINT: builds the local builder image and
+│                           runs build-iso.sh inside it. Use this, not
+│                           build-iso.sh, on the internet-connected machine.
+│
+├── Dockerfile            ← Builder image (Rocky 9 + DinD + xorriso + isomd5sum
+│                           + docker-ce). Built locally by build.sh.
+│
+├── docker-entrypoint.sh  ← Boots dockerd inside the builder, then execs the
+│                           ISO build. Used as the image ENTRYPOINT.
+│
+├── build-iso.sh          ← ONLINE PREP: invoked *inside* the builder container
+│                           by build.sh. Downloads Rocky ISO + deps, builds PXE
+│                           containers, optionally downloads PXE client ISOs,
+│                           repackages into a custom bootable ISO.
 │
 ├── bootstrap.ks          ← KICKSTART: embedded in the ISO by build-iso.sh.
 │                           Runs during Anaconda install. %pre prompts for
@@ -94,7 +104,9 @@ bootstrap-pxe/
 
 ```
 [Internet machine]
-  1. ./build-iso.sh
+  1. ./build.sh
+       ↓ docker build of the local builder image (Rocky 9 + DinD + iso tools)
+       ↓ docker run --privileged → dockerd starts inside → build-iso.sh runs
        ↓ prompts: root password, ansible-runner image tag, include PXE ISOs?
        ↓ downloads: Rocky 9.7 ISO, Docker CE RPMs, EPEL packages
        ↓ pulls + saves: ansible-runner image
