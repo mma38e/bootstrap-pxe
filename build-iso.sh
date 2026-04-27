@@ -220,11 +220,11 @@ log "Docker CE RPMs ready"
 
 # ── Download: EPEL packages ──────────────────────────────────────────────────
 
-step "EPEL packages (htop, iotop, iperf3, minicom, screen + deps)"
+step "EPEL packages (htop, iotop, iperf3, minicom, screen, filesystem tools + deps)"
 
 # Download EPEL RPMs using dnf on the build machine.
 # This resolves all dependencies automatically.
-EPEL_PKGS=(htop iotop iperf3 minicom screen)
+EPEL_PKGS=(htop iotop iperf3 minicom screen ntfs-3g ntfsprogs exfatprogs dosfstools fuse3)
 
 log "Downloading EPEL packages and dependencies..."
 dnf download --resolve --destdir="${RPM_DIR}/epel" \

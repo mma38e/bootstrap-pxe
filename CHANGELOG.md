@@ -26,6 +26,40 @@ Format: `- <type>: <description>` — types: `add`, `fix`, `change`, `remove`
   reflects the new files.
 
 ---
+## [1.1.5] — 2026-04-23
+
+### Added
+- add: filesystem support packages (ntfs-3g, ntfsprogs, exfatprogs, dosfstools,
+  e2fsprogs, xfsprogs, fuse3) to the baseline package set — userspace tools +
+  drivers for NTFS, exFAT, FAT32, ext4, XFS volumes.
+- add: ntfs-3g, ntfsprogs, exfatprogs, dosfstools, fuse3 to the EPEL bundle in
+  `build-iso.sh` so filesystem support is installable on the airgapped target.
+- add: `baseline_packages` and `services_packages` named lists in
+  `bootstrap_server/defaults/main.yml` — declarative single source of truth for
+  package sets, consumed by `packages.yml`.
+- add: developer rule #11 in `AGENTS.md` — Ansible roles are the source of
+  truth for host state. Pre-installation in `bootstrap.sh` is a cold-boot
+  optimization, not a substitute. Roles must remain runnable standalone.
+
+### Changed
+- change: collapsed `install_base_tools`, `install_dev_tools`, `install_network_tools`,
+  `install_monitoring_tools`, `install_serial_tools`, and `install_filesystem_tools`
+  into a single `install_baseline` toggle (default `true`). Replaces six per-group
+  `dnf` tasks in `packages.yml` with one single-transaction call that consumes
+  `baseline_packages`. Faster install, simpler vars, single resolver pass.
+- change: `containers/tftp/Dockerfile` builder stage now installs `grub-efi-amd64-bin`
+  via apt and copies `grubnetx64.efi` from `/usr/lib/grub/x86_64-efi/monolithic/`
+  instead of `wget`-ing it from `archive.ubuntu.com`. GPG-verified, consistent
+  with the syslinux/pxelinux pattern in the same stage. No runtime behavior change.
+
+### Removed
+- remove: per-group install toggles (`install_base_tools`, `install_dev_tools`,
+  `install_network_tools`, `install_monitoring_tools`, `install_serial_tools`,
+  `install_filesystem_tools`). **Breaking for any inventory that overrides these
+  to `false`** — migrate to `install_baseline: false` and add desired packages via
+  a custom task or extra var. Repo-internal grep confirms no current overrides.
+
+---
 
 ## [1.1.0] — 2026-04-09
 

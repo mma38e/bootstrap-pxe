@@ -1,73 +1,26 @@
 ---
-# packages.yml — Install tool packages
-# EPEL packages (htop, iotop, iperf3, minicom, screen) are pre-installed by bootstrap.sh
-# from local RPMs before Ansible runs. No EPEL repo configuration needed.
+# packages.yml — Install host packages
+#
+# `baseline_packages` (in defaults/main.yml) is the SOURCE OF TRUTH for the
+# package set this host must have. Every package the role needs is listed
+# there, regardless of who actually puts the bits on disk first.
+#
+# In the standard airgap flow, bootstrap.sh pre-installs EPEL deps (htop,
+# iotop, iperf3, minicom, screen, ntfs-3g, ntfsprogs, exfatprogs, dosfstools,
+# fuse3) from local RPMs as a cold-boot optimization — but that pre-install
+# is *not* a substitute for this task. dnf is idempotent: re-running here on
+# a fully-installed host is a no-op, and running this role standalone (on a
+# host with EPEL/BaseOS/AppStream available) installs the full set.
 
-- name: Install base tools
+- name: Install baseline packages (single transaction)
   ansible.builtin.dnf:
-    name:
-      - git
-      - vim
-      - curl
-      - wget
-      - jq
-      - rsync
-      - unzip
-      - tar
-      - bash-completion
-      - tmux
-      - brasero
-      - zstd
+    name: "{{ baseline_packages }}"
     state: present
-  when: install_base_tools
+  when: install_baseline
 
-- name: Install dev tools
+- name: Install services packages (httpd, tftp-server)
   ansible.builtin.dnf:
-    name:
-      - python3
-      - python3-pip
-      - make
-      - gcc
-      - kernel-devel
-    state: present
-  when: install_dev_tools
-
-- name: Install network tools
-  ansible.builtin.dnf:
-    name:
-      - nmap
-      - tcpdump
-      - bind-utils
-      - net-tools
-      - iproute
-      - socat
-      - iperf3
-    state: present
-  when: install_network_tools
-
-- name: Install monitoring tools
-  ansible.builtin.dnf:
-    name:
-      - htop
-      - iotop
-      - lsof
-      - strace
-    state: present
-  when: install_monitoring_tools
-
-- name: Install serial / terminal tools
-  ansible.builtin.dnf:
-    name:
-      - minicom
-      - screen
-    state: present
-  when: install_serial_tools
-
-- name: Install services (httpd, tftp-server)
-  ansible.builtin.dnf:
-    name:
-      - httpd
-      - tftp-server
+    name: "{{ services_packages }}"
     state: present
   when: install_services
 

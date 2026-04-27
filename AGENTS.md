@@ -216,3 +216,20 @@ Galaxy collections pre-installed). Invoked via `docker run` in `bootstrap.sh`.
     must appear in `README.md` under the Configuration table with its default
     value and purpose. This keeps the README the single source of truth for
     operators customising the deployment.
+
+11. **Ansible roles are the source of truth for host state** — every package,
+    service, user, file, or config the host needs must be declared in the role
+    itself (e.g. `baseline_packages` in `bootstrap_server/defaults/main.yml`).
+    Pre-installation work done by `bootstrap.sh` (EPEL RPMs, Docker CE, image
+    loads) is a cold-boot **optimization** for the airgap path, never a
+    substitute for an Ansible task. Two consequences for every change:
+
+    - If `bootstrap.sh` installs something, the role must also declare it.
+      Removing the bootstrap.sh step alone must not break the host's final
+      state — a clean Ansible run from a fresh Rocky 9 host with package
+      repos available must converge to the same end state.
+    - Tasks must remain idempotent so re-running on a host where bootstrap.sh
+      already did the work is a no-op (rule #4 reinforces this).
+
+    Goal: the Ansible roles are runnable standalone, both for testing on a
+    non-airgapped lab box and for re-converging an existing bootstrap host.

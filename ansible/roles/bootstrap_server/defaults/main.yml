@@ -18,30 +18,67 @@ bootstrap_data_dirs:
   - "{{ bootstrap_project_dir }}/logs"
 
 # ── Tool installation toggles ─────────────────────────────────────────────────
-# Set any to false to skip that group of packages.
 
-install_base_tools: true
-# git, vim, curl, wget, jq, rsync, unzip, tar, bash-completion, tmux
-
-install_dev_tools: true
-# python3, python3-pip, make, gcc, kernel-devel
-
-install_network_tools: true
-# nmap, tcpdump, bind-utils, net-tools, iproute, socat, iperf3, minicom
-
-install_monitoring_tools: true
-# htop, iotop, lsof, strace
-
-install_serial_tools: true
-# screen
+install_baseline: true
+# Installs the full baseline package set (see baseline_packages below).
+# Set to false only for highly customized inventories — the role assumes baseline = on.
 
 install_services: false
-# httpd, tftp-server — disabled by default; handled by the pxe-server repo
+# httpd, tftp-server — disabled by default; handled by the pxe-server stack.
 
 install_k8s_tools: false
-# kubectl, helm, k9s
-# Disabled by default — these are better sideloaded via Docker containers.
+# kubectl, helm, k9s — disabled by default; prefer running these in containers.
 # Set to true only if you need native CLI tools on the host.
+
+# ── Package lists ────────────────────────────────────────────────────────────
+baseline_packages:
+  # Base utilities
+  - git
+  - vim
+  - curl
+  - wget
+  - jq
+  - rsync
+  - unzip
+  - tar
+  - bash-completion
+  - tmux
+  - brasero
+  - zstd
+  # Dev / build
+  - python3
+  - python3-pip
+  - make
+  - gcc
+  - kernel-devel
+  # Network
+  - nmap
+  - tcpdump
+  - bind-utils
+  - net-tools
+  - iproute
+  - socat
+  - iperf3
+  # Monitoring
+  - htop
+  - iotop
+  - lsof
+  - strace
+  # Serial / terminal
+  - minicom
+  - screen
+  # Filesystem (NTFS, exFAT, FAT32, ext4, XFS)
+  - ntfs-3g
+  - ntfsprogs
+  - exfatprogs
+  - dosfstools
+  - e2fsprogs
+  - xfsprogs
+  - fuse3
+
+services_packages:
+  - httpd
+  - tftp-server
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 # Docker CE is installed by bootstrap.sh before Ansible runs.

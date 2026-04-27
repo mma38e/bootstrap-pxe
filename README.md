@@ -48,7 +48,7 @@ The resulting ISO is self-contained — no internet access is needed on the targ
 |---|---|---|
 | Rocky 9.7 DVD ISO | `download.rockylinux.org` | For installing the host OS |
 | Docker CE RPMs | `download.docker.com` | docker-ce, cli, containerd, compose-plugin |
-| EPEL packages | `dl.fedoraproject.org` | htop, iotop, iperf3, minicom, screen + deps |
+| EPEL packages | `dl.fedoraproject.org` | htop, iotop, iperf3, minicom, screen, ntfs-3g, ntfsprogs, exfatprogs, dosfstools, fuse3 + deps |
 | ansible-runner image | `docker save mma38e/ansible-runner:latest` | Ansible execution container |
 | PXE container images | Built by `docker compose build` | pxe-dhcp, pxe-tftp, pxe-http |
 | Ubuntu 22.04 ISO | `releases.ubuntu.com` | Optional — for PXE clients |
@@ -133,11 +133,7 @@ Override in `ansible/group_vars/all.yml` or via `-e` flags:
 |---|---|---|
 | `bootstrap_admin_user` | `cloud` | Admin username created by Ansible |
 | `bootstrap_admin_password` | `password` | Default password — **change in group_vars or vault** |
-| `install_base_tools` | `true` | git, vim, curl, wget, jq, rsync, tmux, unzip |
-| `install_dev_tools` | `true` | python3, pip, make, gcc, kernel-devel |
-| `install_network_tools` | `true` | nmap, tcpdump, bind-utils, socat, iperf3 |
-| `install_monitoring_tools` | `true` | htop, iotop, lsof, strace |
-| `install_serial_tools` | `true` | minicom, screen |
+| `install_baseline` | `true` | Full baseline tool set — see `baseline_packages` in `bootstrap_server/defaults/main.yml`. Includes base utilities, dev/build, network, monitoring, serial, and filesystem tools (NTFS / exFAT / FAT32 / ext4 / XFS). |
 | `install_cockpit` | `true` | Enable cockpit.socket + firewall port 9090 |
 | `install_k8s_tools` | `false` | kubectl, helm, k9s |
 
