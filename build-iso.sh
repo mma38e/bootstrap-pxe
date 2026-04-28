@@ -39,6 +39,13 @@ ROCKY_PXE_ISO_SHA256="${ROCKY_PXE_ISO_SHA256:-d48e902325dce6793935b4e13672a0d9a4
 
 DATE_TAG="$(date +%Y%m%d)"
 OUTPUT_ISO="${SCRIPT_DIR}/bootstrap-pxe-${DATE_TAG}.iso"
+
+# Volume label for the output ISO. Must be FAT32-compatible (≤11 chars,
+# A-Z 0-9 _) so Rufus preserves it on USB write. Used by the boot menu's
+# inst.stage2=hd:LABEL=... and inst.repo=hd:LABEL=... so the same kickstart
+# resolves whether booted from CD-ROM or from USB.
+ISO_LABEL="BSTRAP_PXE"
+
 WORK_DIR="${SCRIPT_DIR}/work"
 ISO_WORK="${WORK_DIR}/iso"
 FILES_DIR="${SCRIPT_DIR}/files"
@@ -391,14 +398,20 @@ step "Updating boot menus"
 ISOLINUX_CFG="${ISO_WORK}/isolinux/isolinux.cfg"
 if [[ -f "${ISOLINUX_CFG}" ]]; then
     log "Patching isolinux/isolinux.cfg..."
-    # Prepend our entry and set default timeout
-    ISOLINUX_ENTRY=$(cat <<'ISOL'
+    # Prepend our two entries (CD-ROM default + USB) and set default timeout.
+    # The same kickstart serves both — only inst.repo= and inst.ks= differ.
+    ISOLINUX_ENTRY=$(cat <<ISOL
 
-label bootstrap
-  menu label ^Bootstrap Server Install (Kickstart)
+label bootstrap-cd
+  menu label ^Bootstrap Install (CD-ROM)
   menu default
   kernel vmlinuz
-  append initrd=initrd.img inst.stage2=hd:LABEL=Rocky-9-7-x86_64-dvd inst.ks=cdrom:/bootstrap.ks quiet
+  append initrd=initrd.img inst.stage2=hd:LABEL=${ISO_LABEL} inst.repo=cdrom inst.ks=cdrom:/bootstrap.ks quiet
+
+label bootstrap-usb
+  menu label Bootstrap Install (^USB)
+  kernel vmlinuz
+  append initrd=initrd.img inst.stage2=hd:LABEL=${ISO_LABEL} inst.repo=hd:LABEL=${ISO_LABEL} inst.ks=hd:LABEL=${ISO_LABEL}:/bootstrap.ks quiet
 
 ISOL
 )
@@ -438,10 +451,15 @@ fi
 
 if [[ -f "${GRUB_CFG}" ]]; then
     log "Patching EFI/BOOT/grub.cfg..."
-    GRUB_ENTRY=$(cat <<'GRUB'
+    GRUB_ENTRY=$(cat <<GRUB
 
-menuentry 'Bootstrap Server Install (Kickstart)' --class fedora --class gnu-linux --class gnu --class os {
-    linuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=Rocky-9-7-x86_64-dvd inst.ks=cdrom:/bootstrap.ks quiet
+menuentry 'Bootstrap Install (CD-ROM)' --class fedora --class gnu-linux --class gnu --class os {
+    linuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=${ISO_LABEL} inst.repo=cdrom inst.ks=cdrom:/bootstrap.ks quiet
+    initrdefi /images/pxeboot/initrd.img
+}
+
+menuentry 'Bootstrap Install (USB)' --class fedora --class gnu-linux --class gnu --class os {
+    linuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=${ISO_LABEL} inst.repo=hd:LABEL=${ISO_LABEL} inst.ks=hd:LABEL=${ISO_LABEL}:/bootstrap.ks quiet
     initrdefi /images/pxeboot/initrd.img
 }
 
@@ -473,23 +491,15 @@ log "Boot menus updated"
 
 step "Repackaging ISO"
 
-# Read original ISO volume ID using xorriso
-log "Reading original ISO metadata..."
-VOLUME_ID=$(xorriso -indev "${ROCKY_ISO}" -pvd_info 2>&1 | grep "^Volume Id" | sed 's/^Volume Id[[:space:]]*:[[:space:]]*//' | tr -d ' ')
-if [[ -z "${VOLUME_ID}" ]]; then
-    # Fallback: extract from xorriso report format
-    VOLUME_ID=$(xorriso -indev "${ROCKY_ISO}" -report_system_area plain 2>&1 | grep -i "volume id" | head -1 | awk -F: '{print $2}' | xargs)
-fi
-if [[ -z "${VOLUME_ID}" ]]; then
-    VOLUME_ID="Rocky-9-7-x86_64-dvd"
-    log "Could not detect Volume ID, using default: ${VOLUME_ID}"
-fi
-log "Volume ID: ${VOLUME_ID}"
+# Use our own short, FAT32-compatible label (ISO_LABEL) instead of Rocky's
+# 20-char "Rocky-9-7-x86_64-dvd" — Rufus would otherwise truncate or rewrite
+# it on USB write, breaking the boot menu's hd:LABEL=... lookups.
+log "Volume label: ${ISO_LABEL}"
 
 log "Building new ISO..."
 xorriso -as mkisofs \
     -o "${OUTPUT_ISO}" \
-    -V "${VOLUME_ID}" \
+    -V "${ISO_LABEL}" \
     -J -joliet-long -r \
     -b isolinux/isolinux.bin \
     -c isolinux/boot.cat \

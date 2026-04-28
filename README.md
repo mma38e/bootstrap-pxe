@@ -102,8 +102,21 @@ Output: `bootstrap-pxe-<YYYYMMDD>.iso`
 
 ### Step 2 — Boot the target machine
 
-Write the ISO to USB or mount as a virtual disk and boot. The installer will
-prompt for hostname, IP address, netmask, gateway, and DNS.
+Write the ISO to USB or mount as a virtual disk and boot. The boot menu offers
+two install entries that point at the same kickstart:
+
+- **Bootstrap Install (CD-ROM)** — default. Use when booting from physical
+  optical media or a virtual ISO mount.
+- **Bootstrap Install (USB)** — use when booting from a USB stick written by
+  Rufus or `dd`. The install source is read from the USB partition by volume
+  label (`BSTRAP_PXE`) instead of from a CD-ROM device.
+
+> **Rufus tip:** when prompted, select **DD Image mode** (not ISO mode). DD
+> mode preserves the volume label and hybrid ISO layout the boot menu relies
+> on. ISO mode reformats to FAT32 and may rename the volume.
+
+The installer will then prompt for hostname, IP address, netmask, gateway,
+and DNS.
 
 ### Step 3 — Complete setup
 

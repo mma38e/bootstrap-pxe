@@ -5,6 +5,31 @@ Format: `- <type>: <description>` — types: `add`, `fix`, `change`, `remove`
 
 ---
 
+## [Unreleased]
+
+### Added
+- add: second boot menu entry "Bootstrap Install (USB)" in the output ISO's
+  isolinux + GRUB EFI configs. Uses `inst.repo=hd:LABEL=BSTRAP_PXE` and
+  `inst.ks=hd:LABEL=BSTRAP_PXE:/bootstrap.ks` so installs from USB written by
+  Rufus (DD mode) work without needing a CD-ROM device. The original entry is
+  retained as "Bootstrap Install (CD-ROM)" and remains the default.
+- add: `ISO_LABEL="BSTRAP_PXE"` constant in `build-iso.sh` — short,
+  FAT32-compatible (≤11 chars) volume label applied to the output ISO via
+  `xorriso -V`. Replaces the inherited 20-char Rocky label that Rufus would
+  truncate or rewrite on USB write.
+
+### Changed
+- change: `bootstrap.ks` no longer specifies `cdrom` as the install source.
+  Anaconda picks the source from `inst.repo=` in the boot menu entry, so the
+  same kickstart serves both CD-ROM and USB boot paths (one source of truth).
+- change: `build-iso.sh` boot-menu generation now uses unquoted heredocs and
+  expands `${ISO_LABEL}` into the isolinux and grub.cfg entries instead of
+  hardcoding `Rocky-9-7-x86_64-dvd`.
+- change: `README.md` Step 2 documents the two boot menu entries and recommends
+  Rufus DD mode for USB writes.
+
+---
+
 ## [1.2.0] — 2026-04-25
 
 ### Added
