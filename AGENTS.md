@@ -22,10 +22,20 @@ single project with two Ansible roles.
 ```
 bootstrap-pxe/
 │
-├── build-iso.sh          ← ONLINE PREP: run on internet-connected machine
-│                           Downloads Rocky ISO + deps, builds PXE containers,
-│                           optionally downloads PXE client ISOs, repackages
-│                           into a custom bootable ISO.
+├── build.sh              ← ENTRY POINT: builds the local builder image and
+│                           runs build-iso.sh inside it. Use this, not
+│                           build-iso.sh, on the internet-connected machine.
+│
+├── Dockerfile            ← Builder image (Rocky 9 + DinD + xorriso + isomd5sum
+│                           + docker-ce). Built locally by build.sh.
+│
+├── docker-entrypoint.sh  ← Boots dockerd inside the builder, then execs the
+│                           ISO build. Used as the image ENTRYPOINT.
+│
+├── build-iso.sh          ← ONLINE PREP: invoked *inside* the builder container
+│                           by build.sh. Downloads Rocky ISO + deps, builds PXE
+│                           containers, optionally downloads PXE client ISOs,
+│                           repackages into a custom bootable ISO.
 │
 ├── bootstrap.ks          ← KICKSTART: embedded in the ISO by build-iso.sh.
 │                           Runs during Anaconda install. %pre prompts for
@@ -94,7 +104,9 @@ bootstrap-pxe/
 
 ```
 [Internet machine]
-  1. ./build-iso.sh
+  1. ./build.sh
+       ↓ docker build of the local builder image (Rocky 9 + DinD + iso tools)
+       ↓ docker run --privileged → dockerd starts inside → build-iso.sh runs
        ↓ prompts: root password, ansible-runner image tag, include PXE ISOs?
        ↓ downloads: Rocky 9.7 ISO, Docker CE RPMs, EPEL packages
        ↓ pulls + saves: ansible-runner image
@@ -204,3 +216,20 @@ Galaxy collections pre-installed). Invoked via `docker run` in `bootstrap.sh`.
     must appear in `README.md` under the Configuration table with its default
     value and purpose. This keeps the README the single source of truth for
     operators customising the deployment.
+
+11. **Ansible roles are the source of truth for host state** — every package,
+    service, user, file, or config the host needs must be declared in the role
+    itself (e.g. `baseline_packages` in `bootstrap_server/defaults/main.yml`).
+    Pre-installation work done by `bootstrap.sh` (EPEL RPMs, Docker CE, image
+    loads) is a cold-boot **optimization** for the airgap path, never a
+    substitute for an Ansible task. Two consequences for every change:
+
+    - If `bootstrap.sh` installs something, the role must also declare it.
+      Removing the bootstrap.sh step alone must not break the host's final
+      state — a clean Ansible run from a fresh Rocky 9 host with package
+      repos available must converge to the same end state.
+    - Tasks must remain idempotent so re-running on a host where bootstrap.sh
+      already did the work is a no-op (rule #4 reinforces this).
+
+    Goal: the Ansible roles are runnable standalone, both for testing on a
+    non-airgapped lab box and for re-converging an existing bootstrap host.

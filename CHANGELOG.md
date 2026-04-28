@@ -5,6 +5,62 @@ Format: `- <type>: <description>` — types: `add`, `fix`, `change`, `remove`
 
 ---
 
+## [1.2.0] — 2026-04-25
+
+### Added
+- add: `Dockerfile` at repo root — Rocky 9 + DinD builder image with `xorriso`,
+  `isomd5sum`, `docker-ce`, `docker-compose-plugin`, and `docker-buildx-plugin`.
+  Replaces the requirement to install ISO build tooling on the host.
+- add: `docker-entrypoint.sh` — boots `dockerd` with `overlay2` inside the
+  builder container, waits for readiness, then execs `build-iso.sh`.
+- add: `build.sh` — top-level wrapper that builds the local builder image and
+  runs `build-iso.sh` inside it (`--privileged`, named volume
+  `bootstrap-pxe-builder-cache` for `/var/lib/docker` to persist image cache
+  between local runs). New supported entry point for ISO builds.
+- add: `.dockerignore` — limits the build context to `Dockerfile` +
+  `docker-entrypoint.sh`; keeps the context under 1 KB.
+
+### Changed
+- change: `README.md` — Prerequisites now requires only Docker on the host;
+  Step 1 documents `./build.sh` as the entry point; Repository Structure
+  reflects the new files.
+
+---
+## [1.1.5] — 2026-04-23
+
+### Added
+- add: filesystem support packages (ntfs-3g, ntfsprogs, exfatprogs, dosfstools,
+  e2fsprogs, xfsprogs, fuse3) to the baseline package set — userspace tools +
+  drivers for NTFS, exFAT, FAT32, ext4, XFS volumes.
+- add: ntfs-3g, ntfsprogs, exfatprogs, dosfstools, fuse3 to the EPEL bundle in
+  `build-iso.sh` so filesystem support is installable on the airgapped target.
+- add: `baseline_packages` and `services_packages` named lists in
+  `bootstrap_server/defaults/main.yml` — declarative single source of truth for
+  package sets, consumed by `packages.yml`.
+- add: developer rule #11 in `AGENTS.md` — Ansible roles are the source of
+  truth for host state. Pre-installation in `bootstrap.sh` is a cold-boot
+  optimization, not a substitute. Roles must remain runnable standalone.
+
+### Changed
+- change: collapsed `install_base_tools`, `install_dev_tools`, `install_network_tools`,
+  `install_monitoring_tools`, `install_serial_tools`, and `install_filesystem_tools`
+  into a single `install_baseline` toggle (default `true`). Replaces six per-group
+  `dnf` tasks in `packages.yml` with one single-transaction call that consumes
+  `baseline_packages`. Faster install, simpler vars, single resolver pass.
+- change: `containers/tftp/Dockerfile` builder stage now installs `grub-efi-amd64-bin`
+  via apt and copies `grubnetx64.efi` from `/usr/lib/grub/x86_64-efi/monolithic/`
+  instead of `wget`-ing it from `archive.ubuntu.com`. GPG-verified, consistent
+  with the syslinux/pxelinux pattern in the same stage. No runtime behavior change.
+
+### Removed
+- remove: per-group install toggles (`install_base_tools`, `install_dev_tools`,
+  `install_network_tools`, `install_monitoring_tools`, `install_serial_tools`,
+  `install_filesystem_tools`). **Breaking for any inventory that overrides these
+  to `false`** — migrate to `install_baseline: false` and add desired packages via
+  a custom task or extra var. Repo-internal grep confirms no current overrides.
+
+---
+
 ## [1.1.0] — 2026-04-09
 
 ### Added
