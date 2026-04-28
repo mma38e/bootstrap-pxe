@@ -10,12 +10,21 @@ OS=$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME}" || echo "unknown")
 DOCKER=$(systemctl is-active docker 2>/dev/null || echo "inactive")
 COCKPIT=$(systemctl is-active cockpit.socket 2>/dev/null || echo "inactive")
 
+# /etc/bootstrap-pxe-release is written by bootstrap.ks at install time and
+# identifies which baseline release this host was provisioned from.
+if [[ -r /etc/bootstrap-pxe-release ]]; then
+    BASELINE=$(. /etc/bootstrap-pxe-release 2>/dev/null && echo "${VERSION} (built ${BUILD_DATE})")
+else
+    BASELINE="unknown"
+fi
+
 echo "==========================================================="
 echo "  Bootstrap Server — $(hostname -s)"
 echo "==========================================================="
 printf "  IP:       %s\n" "${IP:-unknown}"
 printf "  OS:       %s\n" "${OS}"
 printf "  Kernel:   %s\n" "${KERNEL}"
+printf "  Baseline: %s\n" "${BASELINE}"
 printf "  Uptime:   %s\n" "${UPTIME}"
 echo ""
 printf "  Docker:   %s\n" "${DOCKER}"

@@ -1,13 +1,29 @@
 # Changelog
 
 All notable changes to `bootstrap-pxe` are documented here.
-Format: `- <type>: <description>` — types: `add`, `fix`, `change`, `remove`
+Format: `- <type>: <description>` — types: `add`, `fix`, `change`, `remove`.
+
+Changelog sections are added **at PR-merge time** alongside a `VERSION` bump
+in the same commit; there is no `[Unreleased]` rolling section. The current
+release is whatever `VERSION` says — that value is also stamped onto every
+provisioned host at install time as `/etc/bootstrap-pxe-release`. See
+`AGENTS.md` rule #1.
 
 ---
 
-## [Unreleased]
+## [1.3.0] — 2026-04-28
 
 ### Added
+- add: top-level `VERSION` file as the single source of truth for the
+  baseline release. Bumped at PR-merge time alongside a CHANGELOG section
+  per the new AGENTS.md rule #1.
+- add: per-host baseline stamp at `/etc/bootstrap-pxe-release`, written by
+  `bootstrap.ks` `%post` from `__BASELINE_VERSION__` and `__BASELINE_BUILD_DATE__`
+  tokens substituted by `build-iso.sh` (alongside the existing `__ROOT_PW_HASH__`).
+  File is in os-release format (NAME / VERSION / BUILD_DATE / INSTALLED) so
+  operators and tooling can identify the baseline a host was provisioned from.
+- add: `Baseline:` line in the bootstrap MOTD (`motd.j2`) sourcing
+  `/etc/bootstrap-pxe-release` so the version is visible at every login.
 - add: second boot menu entry "Bootstrap Install (USB)" in the output ISO's
   isolinux + GRUB EFI configs. Uses `inst.repo=hd:LABEL=BSTRAP_PXE` and
   `inst.ks=hd:LABEL=BSTRAP_PXE:/bootstrap.ks` so installs from USB written by
@@ -26,7 +42,10 @@ Format: `- <type>: <description>` — types: `add`, `fix`, `change`, `remove`
   expands `${ISO_LABEL}` into the isolinux and grub.cfg entries instead of
   hardcoding `Rocky-9-7-x86_64-dvd`.
 - change: `README.md` Step 2 documents the two boot menu entries and recommends
-  Rufus DD mode for USB writes.
+  Rufus DD mode for USB writes; Step 3 points operators at
+  `/etc/bootstrap-pxe-release` for baseline version info.
+- change: `AGENTS.md` rule #1 rewritten — changelog entries are added at
+  PR-merge time alongside a `VERSION` bump (no rolling `[Unreleased]` block).
 - add: `install_classification_banner` toggle and `class_level` /
   `classification_banners` vars in `bootstrap_server/defaults/main.yml` (default
   off; default level `UNCLASSIFIED`). When enabled, installs Rocky/RHEL 9's

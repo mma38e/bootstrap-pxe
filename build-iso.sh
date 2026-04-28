@@ -363,10 +363,21 @@ log "ISO extracted to ${ISO_WORK}/"
 
 step "Injecting bootstrap artifacts"
 
-# Inject kickstart with password hash substituted
-log "Processing kickstart file..."
+# Inject kickstart with password hash + baseline version/date substituted.
+# VERSION is the single source of truth for the baseline release; bumped
+# (along with a CHANGELOG entry) at PR-merge time per AGENTS.md rule #1.
+VERSION_FILE="${SCRIPT_DIR}/VERSION"
+[[ -f "${VERSION_FILE}" ]] || die "VERSION file not found: ${VERSION_FILE}"
+BASELINE_VERSION=$(tr -d '[:space:]' < "${VERSION_FILE}")
+BASELINE_BUILD_DATE=$(date -u +%Y-%m-%d)
+[[ -n "${BASELINE_VERSION}" ]] || die "VERSION file is empty"
+
+log "Processing kickstart file (baseline ${BASELINE_VERSION}, built ${BASELINE_BUILD_DATE})..."
 KS_INJECTED="${ISO_WORK}/bootstrap.ks"
-sed "s|__ROOT_PW_HASH__|${ROOT_PW_HASH}|g" "${KS_FILE}" > "${KS_INJECTED}"
+sed -e "s|__ROOT_PW_HASH__|${ROOT_PW_HASH}|g" \
+    -e "s|__BASELINE_VERSION__|${BASELINE_VERSION}|g" \
+    -e "s|__BASELINE_BUILD_DATE__|${BASELINE_BUILD_DATE}|g" \
+    "${KS_FILE}" > "${KS_INJECTED}"
 
 # Inject bootstrap.sh
 log "Copying bootstrap.sh..."

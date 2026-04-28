@@ -174,5 +174,17 @@ cat > /mnt/sysimage/etc/motd <<'MOTD'
 ===========================================================
 MOTD
 
+# Stamp baseline version onto the host. Tokens are replaced by build-iso.sh
+# from the repo's VERSION file and the build date. INSTALLED is captured here
+# so each host records when its kickstart actually ran.
+cat > /mnt/sysimage/etc/bootstrap-pxe-release <<RELEASE
+NAME="bootstrap-pxe"
+VERSION="__BASELINE_VERSION__"
+BUILD_DATE="__BASELINE_BUILD_DATE__"
+INSTALLED="$(date -u +%FT%TZ)"
+RELEASE
+chmod 0644 /mnt/sysimage/etc/bootstrap-pxe-release
+
 echo "Kickstart post-install complete. Artifacts placed in ${DEST}/" >> /mnt/sysimage/root/ks-post.log
+echo "Baseline stamped: __BASELINE_VERSION__ (built __BASELINE_BUILD_DATE__)" >> /mnt/sysimage/root/ks-post.log
 %end

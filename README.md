@@ -133,6 +133,17 @@ On completion it prints next steps:
 3. **Switch to GUI** (optional): `systemctl set-default graphical.target && reboot`
 
 Log out and back in to see the dynamic login banner with current system state.
+The MOTD shows the **baseline release** the host was provisioned from. The
+same info is in `/etc/bootstrap-pxe-release` (os-release format), written by
+`bootstrap.ks` at install time from the repo's `VERSION` file:
+
+```bash
+cat /etc/bootstrap-pxe-release
+# NAME="bootstrap-pxe"
+# VERSION="1.3.0"
+# BUILD_DATE="2026-04-28"
+# INSTALLED="2026-04-28T14:32:11Z"
+```
 
 ---
 

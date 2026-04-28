@@ -188,8 +188,16 @@ Galaxy collections pre-installed). Invoked via `docker run` in `bootstrap.sh`.
 
 > **All contributors (human and AI) must follow these rules on every change.**
 
-1. **Update `CHANGELOG.md`** — add an entry for every change. Format:
-   `- <type>: <description>` where type is `add`, `fix`, `change`, `remove`.
+1. **Bump `VERSION` and add a versioned `CHANGELOG.md` section at PR-merge
+   time** — the merging commit (squash commit on the integration branch)
+   bumps the top-level `VERSION` file to the new release and adds a
+   `## [X.Y.Z] — YYYY-MM-DD` section documenting that PR's changes. Format
+   inside the section: `- <type>: <description>` where type is `add`, `fix`,
+   `change`, `remove`. **Do not** accumulate entries under an `[Unreleased]`
+   heading during development — the changelog only describes what shipped.
+   `VERSION` is the single source of truth: `build-iso.sh` reads it and
+   `bootstrap.ks` stamps it onto each provisioned host as
+   `/etc/bootstrap-pxe-release`.
 
 2. **Update `AGENTS.md`** — if you add a new file, change the setup flow, or
    modify the architecture, update the relevant section here.
