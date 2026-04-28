@@ -22,6 +22,11 @@
   import_tasks: services.yml
   tags: [services]
 
+- name: Configure classification banner
+  import_tasks: classification_banner.yml
+  tags: [banner]
+  when: install_classification_banner
+
 - name: Deploy login info script
   ansible.builtin.template:
     src: motd.j2

@@ -5,6 +5,36 @@ Format: `- <type>: <description>` — types: `add`, `fix`, `change`, `remove`
 
 ---
 
+## [Unreleased]
+
+### Added
+- add: `install_classification_banner` toggle and `class_level` /
+  `classification_banners` vars in `bootstrap_server/defaults/main.yml` (default
+  off; default level `UNCLASSIFIED`). When enabled, installs Rocky/RHEL 9's
+  `gnome-shell-extension-classification-banner` package and applies a
+  system-wide dconf profile (`/etc/dconf/db/local.d/`) with the level's
+  message + colors. Settings are locked so non-root users cannot alter or
+  disable them. Wayland-native — no X11 fallback needed.
+- add: `tasks/classification_banner.yml`, `templates/dconf-classification-banner.j2`,
+  and a `dconf update` handler in `bootstrap_server/handlers/main.yml`.
+- add: `Configure classification banner` import in `tasks/main.yml`, gated by
+  the toggle and tagged `[banner]`.
+
+### Notes
+- Color presets ship for UNCLASSIFIED (green), CUI (purple), CONFIDENTIAL
+  (blue), SECRET (red), TOP SECRET (orange). Add or override entries in
+  `classification_banners` for site-specific levels.
+- The role does not actively remove the banner if the toggle is later set to
+  `false`. Operators removing the banner should `dnf remove` the package and
+  delete `/etc/dconf/db/local.d/00-classification-banner` and the matching
+  lock file by hand, then `dconf update`.
+- TODO: verify `classification_banner_uuid` (`classification-banner@gnome-shell-extensions.gcampax.github.com`)
+  and the GSettings schema keys against a real Rocky 9 install on first boot
+  test; adjust `defaults/main.yml` and the template if RHEL's package uses a
+  different UUID or key set.
+
+---
+
 ## [1.2.0] — 2026-04-25
 
 ### Added

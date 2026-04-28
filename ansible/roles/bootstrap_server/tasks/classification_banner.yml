@@ -1,0 +1,64 @@
+---
+# classification_banner.yml — Install + lock the GNOME classification banner
+#
+# Uses Rocky/RHEL 9's gnome-shell-extension-classification-banner package
+# (Wayland-native) plus a system-wide dconf profile so the banner cannot be
+# disabled by unprivileged users. New GNOME sessions pick up the change at
+# next login; existing sessions need a logout/login.
+#
+# Sanity-check class_level resolves to a known banner before installing.
+
+- name: Validate class_level is defined in classification_banners
+  ansible.builtin.assert:
+    that: class_level in classification_banners
+    fail_msg: >-
+      class_level={{ class_level }} is not a key in classification_banners.
+      Add it to defaults/main.yml or override class_level in inventory.
+
+- name: Install gnome-shell-extension-classification-banner
+  ansible.builtin.dnf:
+    name: gnome-shell-extension-classification-banner
+    state: present
+
+- name: Ensure dconf system db directory exists
+  ansible.builtin.file:
+    path: /etc/dconf/db/local.d/locks
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Register 'local' system db in user dconf profile
+  ansible.builtin.copy:
+    dest: /etc/dconf/profile/user
+    content: |
+      user-db:user
+      system-db:local
+    owner: root
+    group: root
+    mode: "0644"
+  notify: dconf update
+
+- name: Render classification banner dconf settings
+  ansible.builtin.template:
+    src: dconf-classification-banner.j2
+    dest: /etc/dconf/db/local.d/00-classification-banner
+    owner: root
+    group: root
+    mode: "0644"
+  notify: dconf update
+
+- name: Lock classification banner keys (prevents user override)
+  ansible.builtin.copy:
+    dest: /etc/dconf/db/local.d/locks/classification-banner
+    content: |
+      /org/gnome/shell/enabled-extensions
+      /org/gnome/shell/extensions/classification-banner/message
+      /org/gnome/shell/extensions/classification-banner/color
+      /org/gnome/shell/extensions/classification-banner/background-color
+      /org/gnome/shell/extensions/classification-banner/top-banner
+      /org/gnome/shell/extensions/classification-banner/bottom-banner
+    owner: root
+    group: root
+    mode: "0644"
+  notify: dconf update
