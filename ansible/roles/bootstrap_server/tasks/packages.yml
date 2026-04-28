@@ -17,11 +17,8 @@
       - bash-completion
       - tmux
       - brasero
-<<<<<<< HEAD
       - k3b
-=======
       - zstd
->>>>>>> develop
     state: present
   when: install_base_tools
 
