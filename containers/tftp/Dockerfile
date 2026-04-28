@@ -4,15 +4,14 @@
 FROM ubuntu:22.04 AS boot-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        wget \
         syslinux \
         syslinux-common \
         pxelinux \
+        grub-efi-amd64-bin \
     && rm -rf /var/lib/apt/lists/*
 
-# Download Ubuntu's pre-built GRUB EFI network boot binary.
-RUN wget --no-check-certificate -O /grubx64.efi \
-        https://archive.ubuntu.com/ubuntu/dists/jammy/main/uefi/grub2-amd64/current/grubnetx64.efi
+# Ubuntu's pre-built GRUB EFI network boot binary (unsigned, monolithic).
+RUN cp /usr/lib/grub/x86_64-efi/monolithic/grubnetx64.efi /grubx64.efi
 
 # Collect BIOS syslinux files into one directory for easy COPY below
 RUN mkdir /syslinux-bios && \

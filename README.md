@@ -197,6 +197,11 @@ See `AGENTS.md` for full architecture details and developer rules.
 - NVIDIA driver support
 - Cockpit profile for baremetal deployments
 - Full repo sync support
+- Secure Boot support for PXE clients (ship `grub-efi-amd64-signed` grubnetx64.efi.signed chained through shim; requires signed downstream kernels)
+- Google Chrome install (RPM bundled for airgap; pinned via group_vars toggle)
+- DoD PKI certificates (install DoD root + intermediate CAs into system trust store, NSSDB for Chrome/Firefox)
+- Classification banner (login/GDM + Cockpit header banner, configurable level via group_vars)
+- LibreOffice support (RPM group bundled for airgap; toggle via group_vars)
 
 ---
 
