@@ -80,6 +80,53 @@ services_packages:
   - httpd
   - tftp-server
 
+# ── Classification banner ────────────────────────────────────────────────────
+install_classification_banner: false
+# When true: install gnome-shell-extension-classification-banner and apply the
+# system-wide dconf settings for the chosen class_level. Settings are LOCKED
+# so non-root users cannot disable or alter them.
+
+class_level: "UNCLASSIFIED"
+# Active classification level. Must be a key in classification_banners below.
+# Override per-host in inventory/host_vars (this is security-relevant config).
+
+classification_banners:
+  UNCLASSIFIED:
+    message: "UNCLASSIFIED"
+    color: "rgba(255,255,255,1)"
+    background-color: "rgba(0,122,51,1)"      # green
+    top-banner: true
+    bottom-banner: false
+  CUI:
+    message: "CUI"
+    color: "rgba(255,255,255,1)"
+    background-color: "rgba(80,43,133,1)"     # purple
+    top-banner: true
+    bottom-banner: true
+  CONFIDENTIAL:
+    message: "CONFIDENTIAL"
+    color: "rgba(255,255,255,1)"
+    background-color: "rgba(0,51,160,1)"      # blue
+    top-banner: true
+    bottom-banner: true
+  SECRET:
+    message: "SECRET"
+    color: "rgba(255,255,255,1)"
+    background-color: "rgba(200,16,46,1)"     # red
+    top-banner: true
+    bottom-banner: true
+  TOP SECRET:
+    message: "TOP SECRET"
+    color: "rgba(0,0,0,1)"
+    background-color: "rgba(255,140,0,1)"     # orange
+    top-banner: true
+    bottom-banner: true
+
+# Canonical extension UUID shipped by Rocky/RHEL 9's
+# gnome-shell-extension-classification-banner package.
+# TODO: verify on a real Rocky 9 install with: ls /usr/share/gnome-shell/extensions/
+classification_banner_uuid: "classification-banner@gnome-shell-extensions.gcampax.github.com"
+
 # ── Docker ────────────────────────────────────────────────────────────────────
 # Docker CE is installed by bootstrap.sh before Ansible runs.
 # This role only ensures the service is enabled and the admin user is in the group.

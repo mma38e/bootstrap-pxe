@@ -1,0 +1,13 @@
+{# dconf settings for the GNOME classification banner extension. #}
+{# Rendered into /etc/dconf/db/local.d/00-classification-banner. #}
+{# Compile with `dconf update` (handler) before changes take effect. #}
+{% set banner = classification_banners[class_level] %}
+[org/gnome/shell]
+enabled-extensions=['{{ classification_banner_uuid }}']
+
+[org/gnome/shell/extensions/classification-banner]
+message='{{ banner.message }}'
+color='{{ banner.color }}'
+background-color='{{ banner["background-color"] }}'
+top-banner={{ banner["top-banner"] | string | lower }}
+bottom-banner={{ banner["bottom-banner"] | string | lower }}

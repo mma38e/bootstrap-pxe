@@ -16,6 +16,7 @@
   ansible.builtin.dnf:
     name: "{{ baseline_packages }}"
     state: present
+    skip_broken: true
   when: install_baseline
 
 - name: Install services packages (httpd, tftp-server)

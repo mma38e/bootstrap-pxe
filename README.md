@@ -148,6 +148,8 @@ Override in `ansible/group_vars/all.yml` or via `-e` flags:
 | `bootstrap_admin_password` | `password` | Default password — **change in group_vars or vault** |
 | `install_baseline` | `true` | Full baseline tool set — see `baseline_packages` in `bootstrap_server/defaults/main.yml`. Includes base utilities, dev/build, network, monitoring, serial, and filesystem tools (NTFS / exFAT / FAT32 / ext4 / XFS). |
 | `install_cockpit` | `true` | Enable cockpit.socket + firewall port 9090 |
+| `install_classification_banner` | `false` | Install + lock the GNOME classification banner extension. See `class_level` and `classification_banners` in `bootstrap_server/defaults/main.yml`. Banner appears at next GNOME login (existing sessions need logout/login). |
+| `class_level` | `UNCLASSIFIED` | Active classification level when the banner is installed. Must be a key in `classification_banners` (UNCLASSIFIED / CUI / CONFIDENTIAL / SECRET / TOP SECRET by default). Override per-host in inventory. |
 | `install_k8s_tools` | `false` | kubectl, helm, k9s |
 
 ### PXE server variables
