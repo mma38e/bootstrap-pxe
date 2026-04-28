@@ -3,7 +3,8 @@
 # This file is injected into the ISO by build-iso.sh.
 # Do not edit the copy inside the ISO directly; edit this source file and rebuild.
 
-cdrom
+# Install source is supplied by inst.repo= in the boot menu entry, so the
+# same kickstart works for both CD-ROM boot and USB boot (via Rufus DD mode).
 text
 reboot
 

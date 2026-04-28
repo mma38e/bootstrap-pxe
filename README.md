@@ -102,8 +102,21 @@ Output: `bootstrap-pxe-<YYYYMMDD>.iso`
 
 ### Step 2 — Boot the target machine
 
-Write the ISO to USB or mount as a virtual disk and boot. The installer will
-prompt for hostname, IP address, netmask, gateway, and DNS.
+Write the ISO to USB or mount as a virtual disk and boot. The boot menu offers
+two install entries that point at the same kickstart:
+
+- **Bootstrap Install (CD-ROM)** — default. Use when booting from physical
+  optical media or a virtual ISO mount.
+- **Bootstrap Install (USB)** — use when booting from a USB stick written by
+  Rufus or `dd`. The install source is read from the USB partition by volume
+  label (`BSTRAP_PXE`) instead of from a CD-ROM device.
+
+> **Rufus tip:** when prompted, select **DD Image mode** (not ISO mode). DD
+> mode preserves the volume label and hybrid ISO layout the boot menu relies
+> on. ISO mode reformats to FAT32 and may rename the volume.
+
+The installer will then prompt for hostname, IP address, netmask, gateway,
+and DNS.
 
 ### Step 3 — Complete setup
 
@@ -135,6 +148,8 @@ Override in `ansible/group_vars/all.yml` or via `-e` flags:
 | `bootstrap_admin_password` | `password` | Default password — **change in group_vars or vault** |
 | `install_baseline` | `true` | Full baseline tool set — see `baseline_packages` in `bootstrap_server/defaults/main.yml`. Includes base utilities, dev/build, network, monitoring, serial, and filesystem tools (NTFS / exFAT / FAT32 / ext4 / XFS). |
 | `install_cockpit` | `true` | Enable cockpit.socket + firewall port 9090 |
+| `install_classification_banner` | `false` | Install + lock the GNOME classification banner extension. See `class_level` and `classification_banners` in `bootstrap_server/defaults/main.yml`. Banner appears at next GNOME login (existing sessions need logout/login). |
+| `class_level` | `UNCLASSIFIED` | Active classification level when the banner is installed. Must be a key in `classification_banners` (UNCLASSIFIED / CUI / CONFIDENTIAL / SECRET / TOP SECRET by default). Override per-host in inventory. |
 | `install_k8s_tools` | `false` | kubectl, helm, k9s |
 
 ### PXE server variables

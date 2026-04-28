@@ -15,3 +15,9 @@
   ansible.builtin.systemd:
     name: cockpit.socket
     state: restarted
+
+- name: dconf update
+  ansible.builtin.command: dconf update
+  # Recompiles /etc/dconf/db/local from /etc/dconf/db/local.d/. Required after
+  # any change under that directory; new GNOME sessions read the compiled db
+  # at login. Existing sessions retain the old values until logout/login.
