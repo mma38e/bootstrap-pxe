@@ -8,7 +8,6 @@ Format: `- <type>: <description>` — types: `add`, `fix`, `change`, `remove`
 ## [Unreleased]
 
 ### Added
-<<<<<<< HEAD
 - add: second boot menu entry "Bootstrap Install (USB)" in the output ISO's
   isolinux + GRUB EFI configs. Uses `inst.repo=hd:LABEL=BSTRAP_PXE` and
   `inst.ks=hd:LABEL=BSTRAP_PXE:/bootstrap.ks` so installs from USB written by
@@ -28,7 +27,6 @@ Format: `- <type>: <description>` — types: `add`, `fix`, `change`, `remove`
   hardcoding `Rocky-9-7-x86_64-dvd`.
 - change: `README.md` Step 2 documents the two boot menu entries and recommends
   Rufus DD mode for USB writes.
-=======
 - add: `install_classification_banner` toggle and `class_level` /
   `classification_banners` vars in `bootstrap_server/defaults/main.yml` (default
   off; default level `UNCLASSIFIED`). When enabled, installs Rocky/RHEL 9's
@@ -53,7 +51,6 @@ Format: `- <type>: <description>` — types: `add`, `fix`, `change`, `remove`
   and the GSettings schema keys against a real Rocky 9 install on first boot
   test; adjust `defaults/main.yml` and the template if RHEL's package uses a
   different UUID or key set.
->>>>>>> classification-banner
 
 ---
 

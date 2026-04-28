@@ -32,3 +32,5 @@ rocky9_enabled: true
 rocky9_extra_profiles:
   - name: rocky9-cockpit-server
     label: "Rocky Linux 9 — Cockpit/Virt Server"
+
+install_classification_banner: true
