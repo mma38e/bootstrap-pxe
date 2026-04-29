@@ -34,3 +34,4 @@ rocky9_extra_profiles:
     label: "Rocky Linux 9 — Cockpit/Virt Server"
 
 install_classification_banner: true
+class_level: "UNCLASSIFIED"
