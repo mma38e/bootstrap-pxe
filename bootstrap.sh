@@ -187,12 +187,12 @@ fi
 log "Running Ansible playbook (bootstrap_server + pxe_server roles)..."
 # Mount the full bootstrap directory so pxe_server role can tar containers/ and
 # docker-compose.yml when syncing project source to the target host.
-# playbook_dir inside the container = /project/ansible
+# playbook_dir inside the container = /runner/ansible
 docker run --rm -i \
     --network host \
-    -v "${SCRIPT_DIR}:/project" \
+    -v "${SCRIPT_DIR}:/runner" \
     -v /root/.ssh:/root/.ssh:ro \
-    -w /project/ansible \
+    -w /runner/ansible \
     "${ANSIBLE_IMAGE}" \
     ansible-playbook -i "${INVENTORY}" "${PLAYBOOK}"
 
