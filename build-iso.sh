@@ -20,9 +20,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KS_FILE="${SCRIPT_DIR}/bootstrap.ks"
 
-ROCKY_VERSION="9.7"
+ROCKY_VERSION="9.8"
 ROCKY_ARCH="x86_64"
-ROCKY_ISO_URL="https://download.rockylinux.org/pub/rocky/9.7/isos/x86_64/Rocky-9.7-x86_64-dvd.iso"
+ROCKY_ISO_URL="https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9.8-x86_64-dvd.iso"
 ROCKY_ISO_SHA256=""  # Will be fetched from CHECKSUM file
 
 DOCKER_CE_REPO="https://download.docker.com/linux/centos/9/x86_64/stable/Packages"
