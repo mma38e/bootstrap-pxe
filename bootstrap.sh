@@ -55,8 +55,6 @@ log "Running on Rocky Linux ${OS_VERSION}"
 [[ -f "${IMAGE_TAR}" ]]  || die "ansible-runner image not found: ${IMAGE_TAR}"
 [[ -d "${ANSIBLE_DIR}" ]] || die "Ansible directory not found: ${ANSIBLE_DIR}"
 
-# ── Step 1: Install Docker CE ──────────────────────────────────────────────────
-
 # ── Step 0: Configure local media as dnf repo ────────────────────────────────
 
 log "Disabling default internet repos..."
@@ -98,16 +96,31 @@ else
     log "WARNING: Could not mount ISO — dnf may not have package sources"
 fi
 
-# ── Step 1: Install Docker CE ──────────────────────────────────────────────────
+# ── Step 1: Install EPEL packages, VS Code, Docker CE ────────────────────────
 
-# Install EPEL packages (htop, iotop, iperf3, minicom + deps) from local RPMs
-EPEL_RPMS=("${RPM_DIR}"/epel/*.rpm)
-if [[ -e "${EPEL_RPMS[0]}" ]]; then
-    log "Installing EPEL packages from local RPMs..."
-    dnf localinstall -y "${EPEL_RPMS[@]}" || true
-else
-    log "WARNING: No EPEL RPMs found in ${RPM_DIR}/epel/"
-fi
+# Install EPEL packages by NAME from a local dnf repo, not via
+# `dnf localinstall *.rpm`. The directory also holds base-library deps that
+# `dnf download --resolve` pulled at mirror versions (newer than the DVD's);
+# force-installing every RPM put them all in one transaction, which aborted
+# on version conflicts and silently skipped htop/screen/etc. Installing by
+# name lets dnf take only what is needed and resolve base deps from the DVD
+# repos. Keep this list in sync with EPEL_PKGS in build-iso.sh.
+EPEL_PKGS=(htop iotop iperf3 minicom screen ntfs-3g ntfsprogs exfatprogs dosfstools fuse3)
+
+[[ -d "${RPM_DIR}/epel/repodata" ]] || die \
+    "No repodata in ${RPM_DIR}/epel/ — this ISO was built by a pre-1.4.0 build-iso.sh. Rebuild the ISO."
+
+log "Configuring local EPEL repo..."
+cat > /etc/yum.repos.d/local-epel.repo <<EOF
+[local-epel]
+name=EPEL packages (Local)
+baseurl=file://${RPM_DIR}/epel
+enabled=1
+gpgcheck=0
+EOF
+
+log "Installing EPEL packages from local-epel repo..."
+dnf install -y "${EPEL_PKGS[@]}"
 
 # Install VS Code from local RPM
 VSCODE_RPMS=("${RPM_DIR}"/vscode/*.rpm)

@@ -11,6 +11,34 @@ provisioned host at install time as `/etc/bootstrap-pxe-release`. See
 
 ---
 
+## [1.4.0] — 2026-07-03
+
+### Fixed
+- fix: EPEL packages (htop, screen, ntfs-3g, ntfsprogs, …) silently failed to
+  install on the target. `dnf download --resolve` in `build-iso.sh` swept
+  base-library deps (glibc, openssl-libs) into `files/rpms/epel/` at live-mirror
+  versions newer than the target's DVD, plus i686 multilib variants; the single
+  `dnf localinstall *.rpm` transaction in `bootstrap.sh` then aborted on glibc
+  version conflicts, and the `|| true` guard hid the failure. The Ansible
+  baseline task's `skip_broken` also silently skipped the EPEL-only packages,
+  so the host converged with them missing.
+
+### Changed
+- change: `build-iso.sh` downloads EPEL packages with `--arch=x86_64,noarch`
+  (no i686 multilib) and builds repo metadata over `files/rpms/epel/` with
+  `createrepo_c` (added to the builder image and REQUIRED_TOOLS).
+- change: `bootstrap.sh` registers `files/rpms/epel/` as the `local-epel` dnf
+  repo and installs the EPEL set **by name** (`dnf install`), letting dnf
+  resolve base deps from the DVD repos and ignore stray RPMs in the directory.
+  The install now fails loudly (no `|| true`); dies with a clear message if the
+  epel dir has no repodata (ISO built by a pre-1.4.0 `build-iso.sh`).
+- change: removed `skip_broken` from the Ansible baseline-packages task — with
+  local-baseos, local-appstream, and local-epel all registered, the full
+  baseline resolves on an airgap host; an unavailable package now fails the
+  play instead of being skipped silently.
+
+---
+
 ## [1.3.0] — 2026-04-28
 
 ### Added

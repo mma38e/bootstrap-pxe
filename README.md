@@ -48,7 +48,7 @@ The resulting ISO is self-contained — no internet access is needed on the targ
 |---|---|---|
 | Rocky 9.7 DVD ISO | `download.rockylinux.org` | For installing the host OS |
 | Docker CE RPMs | `download.docker.com` | docker-ce, cli, containerd, compose-plugin |
-| EPEL packages | `dl.fedoraproject.org` | htop, iotop, iperf3, minicom, screen, ntfs-3g, ntfsprogs, exfatprogs, dosfstools, fuse3 + deps |
+| EPEL packages | `dl.fedoraproject.org` | htop, iotop, iperf3, minicom, screen, ntfs-3g, ntfsprogs, exfatprogs, dosfstools, fuse3 + deps — packaged as a local dnf repo (repodata via `createrepo_c`); installed by name on the target |
 | ansible-runner image | `docker save mma38e/ansible-runner:latest` | Ansible execution container |
 | PXE container images | Built by `docker compose build` | pxe-dhcp, pxe-tftp, pxe-http |
 | Ubuntu 22.04 ISO | `releases.ubuntu.com` | Optional — for PXE clients |

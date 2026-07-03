@@ -57,7 +57,8 @@ bootstrap-pxe/
 │   ├── images/           ← ansible-runner.tar + pxe-images.tar
 │   ├── rpms/             ← Docker CE + EPEL RPMs
 │   │   ├── docker/
-│   │   ├── epel/
+│   │   ├── epel/         ← x86_64/noarch only, with repodata/ (createrepo_c) —
+│   │   │                   registered by bootstrap.sh as the local-epel dnf repo
 │   │   └── vscode/
 │   └── isos/             ← PXE client ISOs (Ubuntu, Rocky) — optional
 │
@@ -108,7 +109,8 @@ bootstrap-pxe/
        ↓ docker build of the local builder image (Rocky 9 + DinD + iso tools)
        ↓ docker run --privileged → dockerd starts inside → build-iso.sh runs
        ↓ prompts: root password, ansible-runner image tag, include PXE ISOs?
-       ↓ downloads: Rocky 9.7 ISO, Docker CE RPMs, EPEL packages
+       ↓ downloads: Rocky 9.7 ISO, Docker CE RPMs, EPEL packages (x86_64/noarch
+         + repodata built with createrepo_c)
        ↓ pulls + saves: ansible-runner image
        ↓ builds + saves: PXE container images (pxe-dhcp, pxe-tftp, pxe-http)
        ↓ optionally downloads: Ubuntu 22.04 + Rocky 9 ISOs for PXE clients
@@ -123,8 +125,9 @@ bootstrap-pxe/
 
 [Target machine — after reboot]
   3. cd /root/bootstrap && ./bootstrap.sh
-       ↓ disables internet repos, mounts ISO as local repos
-       ↓ installs EPEL packages + VS Code from local RPMs
+       ↓ disables internet repos, mounts ISO as local repos (local-baseos,
+         local-appstream) and registers files/rpms/epel as local-epel
+       ↓ installs EPEL packages by name from local-epel + VS Code from local RPM
        ↓ installs Docker CE from local RPMs
        ↓ docker load ansible-runner.tar + pxe-images.tar
        ↓ injects host IP into inventory + group_vars

@@ -5,18 +5,20 @@
 # package set this host must have. Every package the role needs is listed
 # there, regardless of who actually puts the bits on disk first.
 #
-# In the standard airgap flow, bootstrap.sh pre-installs EPEL deps (htop,
+# In the standard airgap flow, bootstrap.sh pre-installs the EPEL set (htop,
 # iotop, iperf3, minicom, screen, ntfs-3g, ntfsprogs, exfatprogs, dosfstools,
-# fuse3) from local RPMs as a cold-boot optimization — but that pre-install
-# is *not* a substitute for this task. dnf is idempotent: re-running here on
-# a fully-installed host is a no-op, and running this role standalone (on a
-# host with EPEL/BaseOS/AppStream available) installs the full set.
+# fuse3) from the local-epel repo as a cold-boot optimization — but that
+# pre-install is *not* a substitute for this task. dnf is idempotent:
+# re-running here on a fully-installed host is a no-op. On an airgap host the
+# full baseline resolves from local-baseos + local-appstream + local-epel
+# (all registered by bootstrap.sh); standalone on a lab box it resolves from
+# the online repos. No skip_broken here — an unavailable package means a
+# repo-setup problem and must fail loudly, not be skipped silently.
 
 - name: Install baseline packages (single transaction)
   ansible.builtin.dnf:
     name: "{{ baseline_packages }}"
     state: present
-    skip_broken: true
   when: install_baseline
 
 - name: Install services packages (httpd, tftp-server)

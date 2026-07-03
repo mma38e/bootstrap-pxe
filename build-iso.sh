@@ -63,7 +63,7 @@ die()  { echo "[build-iso] ERROR: $*" >&2; exit 1; }
 
 step "Checking required tools"
 
-REQUIRED_TOOLS=(xorriso implantisomd5 curl openssl python3 docker rsync)
+REQUIRED_TOOLS=(xorriso implantisomd5 curl openssl python3 docker rsync createrepo_c)
 MISSING=()
 for tool in "${REQUIRED_TOOLS[@]}"; do
     if ! command -v "${tool}" &>/dev/null; then
@@ -73,7 +73,7 @@ done
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
     die "Missing required tools: ${MISSING[*]}
-  Install with: dnf install xorriso isomd5sum curl python3 rsync
+  Install with: dnf install xorriso isomd5sum curl python3 rsync createrepo_c
   Docker must be installed separately."
 fi
 
@@ -231,12 +231,22 @@ step "EPEL packages (htop, iotop, iperf3, minicom, screen, filesystem tools + de
 
 # Download EPEL RPMs using dnf on the build machine.
 # This resolves all dependencies automatically.
+# --arch keeps i686 multilib packages out of the download — the target is
+# x86_64-only, and stray i686 RPMs drag in conflicting i686 base libraries.
 EPEL_PKGS=(htop iotop iperf3 minicom screen ntfs-3g ntfsprogs exfatprogs dosfstools fuse3)
 
 log "Downloading EPEL packages and dependencies..."
 dnf download --resolve --destdir="${RPM_DIR}/epel" \
+    --arch=x86_64,noarch \
     --repo=epel --repo=baseos --repo=appstream \
     "${EPEL_PKGS[@]}" 2>&1 | tail -5
+
+# Build repo metadata so bootstrap.sh can register the directory as a local
+# dnf repo (local-epel) and install by package name. dnf then takes only what
+# each package actually needs — base-library deps that --resolve swept in at
+# mirror versions (newer than the target's DVD) stay out of the transaction.
+log "Building local-epel repo metadata (createrepo_c)..."
+createrepo_c --quiet "${RPM_DIR}/epel"
 
 log "EPEL packages ready: $(ls "${RPM_DIR}"/epel/*.rpm 2>/dev/null | wc -l) RPMs"
 

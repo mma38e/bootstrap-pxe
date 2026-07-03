@@ -8,6 +8,7 @@ RUN dnf install -y --setopt=install_weak_deps=False --nodocs \
  && dnf install -y --setopt=install_weak_deps=False --nodocs \
         xorriso \
         isomd5sum \
+        createrepo_c \
         rsync \
         iptables-nft \
         docker-ce \
