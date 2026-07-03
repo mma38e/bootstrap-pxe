@@ -38,6 +38,12 @@ provisioned host at install time as `/etc/bootstrap-pxe-release`. See
   `set -euo pipefail`) when no iso9660 media is present, instead of reaching
   its intended "could not mount ISO" warning path.
 
+- fix: the Ansible play only authenticated when the build-time root password
+  was literally `password` (the `ansible_ssh_pass` default in group_vars) —
+  any other password made the play UNREACHABLE. `bootstrap.sh` now generates
+  and authorizes a root ed25519 keypair before running ansible-runner (which
+  already mounts /root/.ssh), so auth works with any root password.
+
 ### Changed
 - change: `build-iso.sh` downloads EPEL packages with `--arch=x86_64,noarch`
   (no i686 multilib) and builds repo metadata over `files/rpms/epel/` with

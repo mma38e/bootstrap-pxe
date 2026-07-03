@@ -199,6 +199,20 @@ fi
 
 # ── Step 6: Run Ansible playbook ─────────────────────────────────────────────
 
+# ansible-runner reaches the host over SSH using the mounted /root/.ssh.
+# Generate + authorize a root keypair so the play authenticates regardless of
+# the root password chosen at ISO build time (group_vars' ansible_ssh_pass
+# default only matches the shipped default password).
+if [[ ! -f /root/.ssh/id_ed25519 ]]; then
+    log "Generating root SSH keypair for ansible-runner..."
+    mkdir -p /root/.ssh && chmod 700 /root/.ssh
+    ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/id_ed25519
+fi
+if ! grep -qF "$(cat /root/.ssh/id_ed25519.pub)" /root/.ssh/authorized_keys 2>/dev/null; then
+    cat /root/.ssh/id_ed25519.pub >> /root/.ssh/authorized_keys
+    chmod 600 /root/.ssh/authorized_keys
+fi
+
 log "Running Ansible playbook (bootstrap_server + pxe_server roles)..."
 # Mount the full bootstrap directory so pxe_server role can tar containers/ and
 # docker-compose.yml when syncing project source to the target host.
