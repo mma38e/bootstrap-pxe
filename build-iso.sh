@@ -437,16 +437,27 @@ label bootstrap-usb
 ISOL
 )
     # Insert after the first 'menu' line
-    python3 - "${ISOLINUX_CFG}" "${ISOLINUX_ENTRY}" <<'PYEOF'
-import sys, pathlib
+    python3 - "${ISOLINUX_CFG}" "${ISOLINUX_ENTRY}" "${ISO_LABEL}" <<'PYEOF'
+import sys, pathlib, re
 
 cfg_path = pathlib.Path(sys.argv[1])
-new_entry = sys.argv[2]
+# $(...) in bash strips trailing newlines — restore separation so the
+# inserted block doesn't glue onto the following original line.
+new_entry = sys.argv[2].rstrip('\n') + '\n\n'
+iso_label = sys.argv[3]
 
 lines = cfg_path.read_text().splitlines(keepends=True)
 output = []
 inserted = False
 for line in lines:
+    # Drop the stock 'menu default' markers — otherwise two entries claim
+    # default and isolinux picks the stock one (media check), whose stage2
+    # label no longer exists on the relabeled ISO. Ours is the only default.
+    if line.strip() == 'menu default':
+        continue
+    # The stock entries reference the original DVD volume label, which this
+    # ISO no longer carries — repoint them so media check/rescue still work.
+    line = re.sub(r'hd:LABEL=\S+', f'hd:LABEL={iso_label}', line)
     output.append(line)
     # Insert after the line that sets the menu title / begin block
     if not inserted and line.strip().startswith('menu title'):
@@ -458,7 +469,6 @@ if not inserted:
 
 # Set timeout to 100 (10 seconds in isolinux units)
 result = ''.join(output)
-import re
 result = re.sub(r'^timeout\s+\d+', 'timeout 100', result, flags=re.MULTILINE)
 cfg_path.write_text(result)
 PYEOF
@@ -486,17 +496,22 @@ menuentry 'Bootstrap Install (USB)' --class fedora --class gnu-linux --class gnu
 
 GRUB
 )
-    python3 - "${GRUB_CFG}" "${GRUB_ENTRY}" <<'PYEOF'
+    python3 - "${GRUB_CFG}" "${GRUB_ENTRY}" "${ISO_LABEL}" <<'PYEOF'
 import sys, pathlib, re
 
 cfg_path = pathlib.Path(sys.argv[1])
 new_entry = sys.argv[2]
+iso_label = sys.argv[3]
 
 content = cfg_path.read_text()
 
 # Set default to 0 (our new entry, prepended) and timeout to 10s
 content = re.sub(r'set default="\d+"', 'set default="0"', content)
 content = re.sub(r'set timeout=\d+', 'set timeout=10', content)
+
+# Repoint the stock entries' stage2 at the relabeled volume so media
+# check/rescue still work (the original DVD label no longer exists).
+content = re.sub(r'hd:LABEL=\S+', f'hd:LABEL={iso_label}', content)
 
 # Prepend entry before the first menuentry block, ensuring a blank line separator
 entry = new_entry.rstrip('\n') + '\n\n'

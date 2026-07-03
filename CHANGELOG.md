@@ -23,6 +23,17 @@ provisioned host at install time as `/etc/bootstrap-pxe-release`. See
   baseline task's `skip_broken` also silently skipped the EPEL-only packages,
   so the host converged with them missing.
 
+- fix: BIOS (isolinux) boot of the output ISO failed into a dracut timeout.
+  The stock Rocky media-check entry kept its `menu default` marker, so it —
+  not the injected bootstrap entry — was the boot default, and its
+  `inst.stage2=hd:LABEL=Rocky-…-dvd` points at a label the relabeled ISO no
+  longer carries. The injected block also lost its trailing newline
+  (`$(…)` strips it), gluing `quiet` onto the stock `menu vshift` line.
+  EFI/GRUB was unaffected (`set default="0"`), which is why USB/EFI installs
+  worked. isolinux patching now strips stock `menu default` markers, keeps
+  newline separation, and repoints stock entries (media check, rescue) at
+  the new volume label; the GRUB patch repoints its stock entries too.
+
 ### Changed
 - change: `build-iso.sh` downloads EPEL packages with `--arch=x86_64,noarch`
   (no i686 multilib) and builds repo metadata over `files/rpms/epel/` with
