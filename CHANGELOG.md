@@ -11,6 +11,21 @@ provisioned host at install time as `/etc/bootstrap-pxe-release`. See
 
 ---
 
+## [1.4.1] — 2026-07-03
+
+### Fixed
+- fix: the admin user (`cloud`) ended up with a locked, empty password —
+  console/SSH login was impossible despite README documenting the `password`
+  default. Task ordering was the culprit: docker.yml's "Add admin user to
+  docker group" (`ansible.builtin.user`) ran before users.yml and silently
+  *created* the user (passwordless, locked); users.yml's "Create admin user"
+  then found it existing and `update_password: on_create` never set the
+  password. users.yml now runs first (and ensures the admin groups exist);
+  docker.yml's group-membership task is getent-guarded so tag-scoped runs
+  can modify but never create the user.
+
+---
+
 ## [1.4.0] — 2026-07-03
 
 ### Fixed

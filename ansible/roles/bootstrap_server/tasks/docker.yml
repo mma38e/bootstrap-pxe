@@ -16,9 +16,22 @@
     name: docker
     state: present
 
+# Guarded so a tag-scoped run (--tags docker) can only modify an existing
+# user: ansible.builtin.user would otherwise CREATE the admin user here as a
+# locked, passwordless account, and users.yml's `update_password: on_create`
+# would then never set its password. In the full play users.yml runs first.
+- name: Check whether admin user exists
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ bootstrap_admin_user }}"
+    fail_key: false
+  when: bootstrap_admin_user is defined and bootstrap_admin_user != 'root'
+
 - name: Add admin user to docker group
   ansible.builtin.user:
     name: "{{ bootstrap_admin_user }}"
     groups: docker
     append: true
-  when: bootstrap_admin_user is defined and bootstrap_admin_user != 'root'
+  when:
+    - bootstrap_admin_user is defined and bootstrap_admin_user != 'root'
+    - getent_passwd[bootstrap_admin_user] is not none

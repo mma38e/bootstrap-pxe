@@ -1,5 +1,17 @@
 ---
 # users.yml — Create and configure the admin user
+#
+# MUST run before any other task that references the admin user with
+# ansible.builtin.user (e.g. docker.yml group membership): that module
+# creates a passwordless, locked user as a side effect if it doesn't exist
+# yet, and `update_password: on_create` below then never sets the password.
+
+- name: Ensure admin groups exist
+  ansible.builtin.group:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ bootstrap_admin_groups }}"
+  when: bootstrap_admin_user is defined and bootstrap_admin_user != 'root'
 
 - name: Create admin user
   ansible.builtin.user:
