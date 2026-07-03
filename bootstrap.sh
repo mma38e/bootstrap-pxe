@@ -64,7 +64,9 @@ dnf config-manager --set-disabled '*' 2>/dev/null || true
 ISO_MOUNT="/mnt/iso"
 if ! mountpoint -q "${ISO_MOUNT}" 2>/dev/null; then
     mkdir -p "${ISO_MOUNT}"
-    ISO_DEVICE=$(blkid -t TYPE=iso9660 -o device 2>/dev/null | head -1)
+    # blkid exits 2 when nothing matches — without || true, set -e kills the
+    # script here instead of reaching the "could not mount ISO" warning below.
+    ISO_DEVICE=$(blkid -t TYPE=iso9660 -o device 2>/dev/null | head -1 || true)
     if [[ -n "${ISO_DEVICE}" ]]; then
         log "Mounting ISO from ${ISO_DEVICE}..."
         mount -o ro "${ISO_DEVICE}" "${ISO_MOUNT}"

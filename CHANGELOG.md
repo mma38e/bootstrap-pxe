@@ -34,6 +34,10 @@ provisioned host at install time as `/etc/bootstrap-pxe-release`. See
   newline separation, and repoints stock entries (media check, rescue) at
   the new volume label; the GRUB patch repoints its stock entries too.
 
+- fix: `bootstrap.sh` crashed with no message (blkid exit 2 under
+  `set -euo pipefail`) when no iso9660 media is present, instead of reaching
+  its intended "could not mount ISO" warning path.
+
 ### Changed
 - change: `build-iso.sh` downloads EPEL packages with `--arch=x86_64,noarch`
   (no i686 multilib) and builds repo metadata over `files/rpms/epel/` with
