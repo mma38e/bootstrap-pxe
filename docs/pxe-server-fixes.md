@@ -155,8 +155,6 @@ To work out first:
   the console and over RDP.
 - **Access:** decide which networks may reach 3389/tcp, and whether xrdp's default
   self-signed certificate is acceptable.
-- **Smart cards:** check whether a CAC or PIV card on the Windows desktop needs to
-  work inside the RDP session. This is untested and would need its own work.
 
 ## Other open items
 
