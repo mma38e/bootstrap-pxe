@@ -1,0 +1,29 @@
+---
+# chrome.yml — Install Google Chrome
+#
+# The Chrome RPM adds an online dnf repo at install time unless told not to.
+# On an airgapped host that repo is unreachable and would fail every later dnf
+# run, so the defaults file has to exist before the package goes on. Its cron
+# job reads the same file.
+#
+# GPG check is off because dnf has no Google key here: build-iso.sh verifies
+# the airgap RPM's signature, and the online path downloads it over HTTPS.
+
+- name: Stop the Chrome RPM from adding its online repo
+  ansible.builtin.copy:
+    dest: /etc/default/google-chrome
+    content: |
+      repo_add_once="false"
+      repo_reenable_on_distupgrade="false"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install Google Chrome
+  ansible.builtin.dnf:
+    name: >-
+      {{ (bootstrap_airgap_files_dir ~ '/rpms/chrome/google-chrome-stable_current_x86_64.rpm')
+         if (airgap_mode | default(false) | bool)
+         else google_chrome_rpm_url }}
+    state: present
+    disable_gpg_check: true

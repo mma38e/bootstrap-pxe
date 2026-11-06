@@ -11,6 +11,116 @@ provisioned host at install time as `/etc/bootstrap-pxe-release`. See
 
 ---
 
+## [1.5.0] — 2026-11-06
+
+### Added
+- add: smart card support (`install_smartcard`, `tasks/smartcard.yml`) — CCID
+  reader drivers, OpenSC, and the pcscd socket. Chrome finds OpenSC through
+  p11-kit with no per-browser setup. Smart card OS login is not included.
+- add: DoD PKI certificates (`install_dod_certs`, `tasks/dod_certs.yml`,
+  `tasks/nssdb.yml`, `files/configure-nssdb.sh`) — DISA's bundle goes into the
+  system trust store and into Chrome's NSS database for the admin user and
+  `/etc/skel`. `build-iso.sh` verifies the bundle's signed manifest.
+- add: Google Chrome (`install_google_chrome`, `tasks/chrome.yml`) — RPM bundled
+  in the ISO with its signature verified at build time. `/etc/default/google-chrome`
+  stops the RPM adding its online repo, which would fail every later dnf run on
+  an airgapped host.
+- add: VS Code Remote-SSH extension pack for the admin user (`install_vscode`,
+  `vscode_extensions`, `tasks/vscode.yml`), bundled as VSIX files at pinned stable
+  versions, because the marketplace's latest URL serves pre-release builds. The
+  role now also declares VS Code itself, which only `bootstrap.sh` installed.
+
+### Notes
+- Remote-SSH needs a VS Code Server on the machine it connects to, and fetches
+  it from the internet by default. This release ships the extension only, so
+  connecting to an airgapped machine needs that server put in place separately.
+
+### Changed
+- change: `build-iso.sh` always re-downloads the VS Code RPM. The extensions set
+  a minimum VS Code version, so the cached RPM could be too old to install them.
+- change: VS Code is now installed by the role only, so `install_vscode: false`
+  really leaves it off. `bootstrap.sh` no longer installs it.
+- change: the baseline now targets Rocky Linux 9.8 throughout. The host ISO
+  moved to 9.8 in `build-iso.sh` on 2026-07-01; this release finishes the move
+  in the README, AGENTS.md, and the kickstart header and MOTD, so hosts no
+  longer announce 9.7 at login.
+- change: PXE clients moved to Rocky 9.8 (`ROCKY_PXE_ISO_URL` /
+  `ROCKY_PXE_ISO_SHA256` in `build-iso.sh`, `rocky9_iso_url` /
+  `rocky9_iso_checksum` in `pxe_server` defaults).
+- change: `bootstrap.ks` uses `timezone UTC --utc` in place of the deprecated
+  `--isUtc`, which made `ksvalidator` exit non-zero.
+
+### Fixed
+- fix: PXE client ISO download returned 404 — the 9.7 ISO left the main Rocky
+  mirror path when 9.8 shipped. Any build including PXE ISOs, or a run with
+  `airgap_mode: false`, failed at that step.
+
+---
+
+## [1.4.1] — 2026-07-03
+
+### Fixed
+- fix: the admin user (`cloud`) ended up with a locked, empty password —
+  console/SSH login was impossible despite README documenting the `password`
+  default. Task ordering was the culprit: docker.yml's "Add admin user to
+  docker group" (`ansible.builtin.user`) ran before users.yml and silently
+  *created* the user (passwordless, locked); users.yml's "Create admin user"
+  then found it existing and `update_password: on_create` never set the
+  password. users.yml now runs first (and ensures the admin groups exist);
+  docker.yml's group-membership task is getent-guarded so tag-scoped runs
+  can modify but never create the user.
+
+---
+
+## [1.4.0] — 2026-07-03
+
+### Fixed
+- fix: EPEL packages (htop, screen, ntfs-3g, ntfsprogs, …) silently failed to
+  install on the target. `dnf download --resolve` in `build-iso.sh` swept
+  base-library deps (glibc, openssl-libs) into `files/rpms/epel/` at live-mirror
+  versions newer than the target's DVD, plus i686 multilib variants; the single
+  `dnf localinstall *.rpm` transaction in `bootstrap.sh` then aborted on glibc
+  version conflicts, and the `|| true` guard hid the failure. The Ansible
+  baseline task's `skip_broken` also silently skipped the EPEL-only packages,
+  so the host converged with them missing.
+
+- fix: BIOS (isolinux) boot of the output ISO failed into a dracut timeout.
+  The stock Rocky media-check entry kept its `menu default` marker, so it —
+  not the injected bootstrap entry — was the boot default, and its
+  `inst.stage2=hd:LABEL=Rocky-…-dvd` points at a label the relabeled ISO no
+  longer carries. The injected block also lost its trailing newline
+  (`$(…)` strips it), gluing `quiet` onto the stock `menu vshift` line.
+  EFI/GRUB was unaffected (`set default="0"`), which is why USB/EFI installs
+  worked. isolinux patching now strips stock `menu default` markers, keeps
+  newline separation, and repoints stock entries (media check, rescue) at
+  the new volume label; the GRUB patch repoints its stock entries too.
+
+- fix: `bootstrap.sh` crashed with no message (blkid exit 2 under
+  `set -euo pipefail`) when no iso9660 media is present, instead of reaching
+  its intended "could not mount ISO" warning path.
+
+- fix: the Ansible play only authenticated when the build-time root password
+  was literally `password` (the `ansible_ssh_pass` default in group_vars) —
+  any other password made the play UNREACHABLE. `bootstrap.sh` now generates
+  and authorizes a root ed25519 keypair before running ansible-runner (which
+  already mounts /root/.ssh), so auth works with any root password.
+
+### Changed
+- change: `build-iso.sh` downloads EPEL packages with `--arch=x86_64,noarch`
+  (no i686 multilib) and builds repo metadata over `files/rpms/epel/` with
+  `createrepo_c` (added to the builder image and REQUIRED_TOOLS).
+- change: `bootstrap.sh` registers `files/rpms/epel/` as the `local-epel` dnf
+  repo and installs the EPEL set **by name** (`dnf install`), letting dnf
+  resolve base deps from the DVD repos and ignore stray RPMs in the directory.
+  The install now fails loudly (no `|| true`); dies with a clear message if the
+  epel dir has no repodata (ISO built by a pre-1.4.0 `build-iso.sh`).
+- change: removed `skip_broken` from the Ansible baseline-packages task — with
+  local-baseos, local-appstream, and local-epel all registered, the full
+  baseline resolves on an airgap host; an unavailable package now fails the
+  play instead of being skipped silently.
+
+---
+
 ## [1.3.0] — 2026-04-28
 
 ### Added

@@ -1,0 +1,68 @@
+---
+# vscode.yml — Install VS Code and its extensions for the admin user
+#
+# VS Code keeps extensions per user, so accounts created later do not get them.
+# Install order matters offline: remote-ssh is an extension pack, so its
+# members must already be present or VS Code goes looking for them online.
+
+- name: Add the Microsoft VS Code repo
+  ansible.builtin.yum_repository:
+    name: code
+    description: Visual Studio Code
+    baseurl: https://packages.microsoft.com/yumrepos/vscode
+    gpgcheck: true
+    gpgkey: https://packages.microsoft.com/keys/microsoft.asc
+  when: not (airgap_mode | default(false) | bool)
+
+- name: Install VS Code
+  ansible.builtin.dnf:
+    name: >-
+      {{ (bootstrap_airgap_files_dir ~ '/rpms/vscode/code-latest.x86_64.rpm')
+         if (airgap_mode | default(false) | bool)
+         else 'code' }}
+    state: present
+    disable_gpg_check: "{{ airgap_mode | default(false) | bool }}"
+
+# /root/bootstrap is unreadable to the admin user, so the VSIXs move first.
+- name: Create VS Code extensions directory
+  ansible.builtin.file:
+    path: "{{ vscode_extensions_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: airgap_mode | default(false) | bool
+
+- name: Stage VS Code extensions where the admin user can read them
+  ansible.builtin.copy:
+    src: "{{ bootstrap_airgap_files_dir }}/vscode-extensions/"
+    dest: "{{ vscode_extensions_dir }}/"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "u=rwX,go=rX"   # X: a numeric mode here would also hit the directory
+  when: airgap_mode | default(false) | bool
+
+- name: List installed VS Code extensions
+  ansible.builtin.command: code --list-extensions
+  become: true
+  become_user: "{{ bootstrap_admin_user }}"
+  register: vscode_installed
+  changed_when: false
+  when: bootstrap_admin_user != 'root'
+
+- name: Install VS Code extensions
+  ansible.builtin.command:
+    argv:
+      - code
+      - --install-extension
+      - >-
+        {{ (vscode_extensions_dir ~ '/' ~ item ~ '.vsix')
+           if (airgap_mode | default(false) | bool)
+           else item }}
+  become: true
+  become_user: "{{ bootstrap_admin_user }}"
+  loop: "{{ vscode_extensions }}"
+  when:
+    - bootstrap_admin_user != 'root'
+    - (item | lower) not in (vscode_installed.stdout_lines | map('lower') | list)

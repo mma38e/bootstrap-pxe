@@ -7,7 +7,7 @@ AI agents and human contributors. It must be kept up to date as the repo evolves
 
 ## Repository Purpose
 
-`bootstrap-pxe` is a self-contained kit to provision a Rocky Linux 9.7 machine as
+`bootstrap-pxe` is a self-contained kit to provision a Rocky Linux 9.8 machine as
 an infrastructure bootstrap node **and** PXE boot server. It is the **first machine**
 in an airgapped environment — it hosts the `ansible-runner` container, drives Ansible
 against all other machines, and PXE-boots them over the network.
@@ -55,10 +55,14 @@ bootstrap-pxe/
 │
 ├── files/                ← AIRGAP ARTIFACTS (gitignored, populated by build-iso.sh)
 │   ├── images/           ← ansible-runner.tar + pxe-images.tar
-│   ├── rpms/             ← Docker CE + EPEL RPMs
+│   ├── certs/dod/        ← DISA PKCS#7 bundle zip, verified at build time
+│   ├── vscode-extensions/ ← Remote-SSH extension pack VSIX files
+│   ├── rpms/             ← Docker CE, EPEL, VS Code, and Chrome RPMs
 │   │   ├── docker/
-│   │   ├── epel/
-│   │   └── vscode/
+│   │   ├── epel/         ← x86_64/noarch only, with repodata/ (createrepo_c) —
+│   │   │                   registered by bootstrap.sh as the local-epel dnf repo
+│   │   ├── vscode/
+│   │   └── chrome/
 │   └── isos/             ← PXE client ISOs (Ubuntu, Rocky) — optional
 │
 └── ansible/              ← Full machine + PXE configuration via Ansible
@@ -76,7 +80,13 @@ bootstrap-pxe/
         │   │   ├── docker.yml          ← Docker service + group
         │   │   ├── directories.yml     ← /opt/bootstrap tree
         │   │   ├── users.yml           ← Admin user, sudo
-        │   │   └── services.yml        ← httpd, tftp, sshd
+        │   │   ├── services.yml        ← httpd, tftp, sshd
+        │   │   ├── smartcard.yml       ← Reader drivers, OpenSC, pcscd
+        │   │   ├── dod_certs.yml       ← DoD CAs into the system trust store
+        │   │   ├── nssdb.yml           ← DoD CAs into Chrome's per-user NSS dbs
+        │   │   ├── chrome.yml          ← Chrome, with its online repo disabled
+        │   │   └── vscode.yml          ← VS Code + extensions for the admin user
+        │   ├── files/configure-nssdb.sh ← Idempotent NSS CA import
         │   ├── templates/motd.j2
         │   └── handlers/main.yml
         │
@@ -108,7 +118,9 @@ bootstrap-pxe/
        ↓ docker build of the local builder image (Rocky 9 + DinD + iso tools)
        ↓ docker run --privileged → dockerd starts inside → build-iso.sh runs
        ↓ prompts: root password, ansible-runner image tag, include PXE ISOs?
-       ↓ downloads: Rocky 9.7 ISO, Docker CE RPMs, EPEL packages
+       ↓ downloads: Rocky 9.8 ISO, Docker CE RPMs, EPEL packages (x86_64/noarch
+         + repodata built with createrepo_c), VS Code RPM + extensions, Chrome
+         RPM (signature verified), DoD certificates (signed manifest verified)
        ↓ pulls + saves: ansible-runner image
        ↓ builds + saves: PXE container images (pxe-dhcp, pxe-tftp, pxe-http)
        ↓ optionally downloads: Ubuntu 22.04 + Rocky 9 ISOs for PXE clients
@@ -117,21 +129,23 @@ bootstrap-pxe/
 [Target machine — boot from ISO]
   2. Anaconda kickstart (bootstrap.ks)
        ↓ %pre: prompts for hostname + static IP
-       ↓ installs Rocky 9.7 with LVM
+       ↓ installs Rocky 9.8 with LVM
        ↓ %post: copies bootstrap.sh, ansible/, files/, containers/,
          docker-compose.yml to /root/bootstrap/
 
 [Target machine — after reboot]
   3. cd /root/bootstrap && ./bootstrap.sh
-       ↓ disables internet repos, mounts ISO as local repos
-       ↓ installs EPEL packages + VS Code from local RPMs
+       ↓ disables internet repos, mounts ISO as local repos (local-baseos,
+         local-appstream) and registers files/rpms/epel as local-epel
+       ↓ installs EPEL packages by name from local-epel
        ↓ installs Docker CE from local RPMs
        ↓ docker load ansible-runner.tar + pxe-images.tar
        ↓ injects host IP into inventory + group_vars
        ↓ docker run ansible-runner → ansible-playbook site.yml
 
   4. Ansible roles
-       ↓ bootstrap_server: packages, Docker service, users, dirs, services
+       ↓ bootstrap_server: packages, Docker service, users, dirs, services,
+         smart cards, DoD certs, Chrome, VS Code
        ↓ pxe_server: stage ISOs, extract kernels, render configs, compose up
 
   5. PXE server running — clients can now network boot
@@ -149,7 +163,9 @@ docker.yml harmlessly skips when Docker is already present.
 ### Airgap mode
 The `airgap_mode` variable (default `true` in group_vars) controls whether
 `pxe_server/tasks/boot_files.yml` downloads ISOs from the internet or copies
-them from the staging directory (`airgap_iso_staging_dir`).
+them from the staging directory (`airgap_iso_staging_dir`). The bootstrap_server
+Chrome, VS Code, and DoD certificate tasks follow the same split, reading from
+`bootstrap_airgap_files_dir` when it is `true`.
 
 ### Variables and toggles
 All package installation is controlled by boolean toggles in

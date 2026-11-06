@@ -1,0 +1,86 @@
+---
+# dod_certs.yml — Add the DoD PKI CA bundle to the system trust store
+#
+# Airgap: the zip was fetched and verified by build-iso.sh and is read from
+# bootstrap_airgap_files_dir. Online: it is downloaded here. The bundle's file
+# names carry its version, so the .pem.p7b is located rather than named.
+
+- name: Install certificate tools
+  ansible.builtin.dnf:
+    name:
+      - ca-certificates
+      - nss-tools
+      - openssl
+      - unzip
+    state: present
+
+- name: Create scratch directory for the DoD bundle
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: dod-certs
+  register: dod_certs_tmp
+  changed_when: false
+
+- name: Download DoD certificate bundle
+  ansible.builtin.get_url:
+    url: "{{ dod_certs_url }}"
+    dest: "{{ dod_certs_tmp.path }}/{{ dod_certs_zip }}"
+    mode: "0644"
+  when: not (airgap_mode | default(false) | bool)
+  changed_when: false
+
+- name: Unpack DoD certificate bundle
+  ansible.builtin.unarchive:
+    src: >-
+      {{ (bootstrap_airgap_files_dir ~ '/certs/dod/' ~ dod_certs_zip)
+         if (airgap_mode | default(false) | bool)
+         else (dod_certs_tmp.path ~ '/' ~ dod_certs_zip) }}
+    dest: "{{ dod_certs_tmp.path }}"
+    remote_src: true
+  changed_when: false
+
+- name: Locate the PKCS#7 PEM bundle
+  ansible.builtin.find:
+    paths: "{{ dod_certs_tmp.path }}"
+    patterns: "*.pem.p7b"
+    recurse: true
+  register: dod_certs_p7b
+
+- name: Require exactly one PKCS#7 PEM bundle
+  ansible.builtin.assert:
+    that: dod_certs_p7b.matched == 1
+    fail_msg: "Expected one *.pem.p7b in the DoD zip, found {{ dod_certs_p7b.matched }}"
+
+- name: Convert the bundle to PEM
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - pkcs7
+      - -in
+      - "{{ dod_certs_p7b.files[0].path }}"
+      - -print_certs
+      - -out
+      - "{{ dod_certs_tmp.path }}/dod-ca-bundle.pem"
+  changed_when: false
+
+- name: Install the DoD CA bundle as a trust anchor
+  ansible.builtin.copy:
+    src: "{{ dod_certs_tmp.path }}/dod-ca-bundle.pem"
+    dest: "{{ dod_certs_anchor }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  register: dod_certs_installed
+
+# Not a handler: handlers run at the end of the play, so a failure in anything
+# later would drop this, and a re-run would see the anchor unchanged.
+- name: Rebuild the system trust store
+  ansible.builtin.command: update-ca-trust extract
+  when: dod_certs_installed is changed
+
+- name: Remove scratch directory
+  ansible.builtin.file:
+    path: "{{ dod_certs_tmp.path }}"
+    state: absent
+  changed_when: false

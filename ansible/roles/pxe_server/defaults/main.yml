@@ -61,8 +61,8 @@ ubuntu2204_iso_checksum: "sha256:9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a1
 
 # DVD ISO — extracted to the webroot so the installer can fetch packages locally.
 # This is ~10GB. Override to a local mirror to avoid re-downloading.
-rocky9_iso_url: "https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9.7-x86_64-dvd.iso"
-rocky9_iso_checksum: "sha256:d48e902325dce6793935b4e13672a0d9a4f958e02d4e23fcf0a8a34c49ef03da"
+rocky9_iso_url: "https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9.8-x86_64-dvd.iso"
+rocky9_iso_checksum: "sha256:d2bcbb64c2d67511adf80d40cd9543391a33aea5860a355b1d26d7f55236d01f"
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 # Pin a specific Docker CE version, e.g. "5:24.0.7-1~ubuntu.22.04~jammy"

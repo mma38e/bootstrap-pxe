@@ -1,5 +1,5 @@
 #version=RHEL9
-# Rocky Linux 9.7 Kickstart — Bootstrap Server
+# Rocky Linux 9.8 Kickstart — Bootstrap Server
 # This file is injected into the ISO by build-iso.sh.
 # Do not edit the copy inside the ISO directly; edit this source file and rebuild.
 
@@ -10,7 +10,7 @@ reboot
 
 lang en_US.UTF-8
 keyboard --vckeymap=us --xlayouts=us
-timezone UTC --isUtc
+timezone UTC --utc
 
 # ── Network (static IP collected in %pre) ────────────────────────────────────
 %include /tmp/network.ks
@@ -162,7 +162,7 @@ chmod +x "${DEST}/bootstrap.sh" 2>/dev/null || true
 
 cat > /mnt/sysimage/etc/motd <<'MOTD'
 ===========================================================
-  Rocky Linux 9.7 — Bootstrap + PXE Server
+  Rocky Linux 9.8 — Bootstrap + PXE Server
 ===========================================================
   Run the following to complete setup:
 

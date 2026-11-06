@@ -1,0 +1,21 @@
+---
+# nssdb.yml — Per-user NSS databases
+#
+# Chrome reads locally added CAs from each user's ~/.pki/nssdb, not from the
+# system trust store. Configure the admin user, and
+# /etc/skel so accounts created later start out configured. Users who already
+# exist need configure-nssdb.sh run for them.
+
+- name: Add DoD certificates to NSS databases
+  ansible.builtin.script:
+    cmd: >-
+      configure-nssdb.sh
+      {{ item.dir | quote }}
+      {{ item.owner | quote }}
+      {{ dod_certs_anchor | quote }}
+  when: item.dir != '/home/root/.pki/nssdb'
+  register: nssdb_result
+  changed_when: "'changed' in nssdb_result.stdout"
+  loop:
+    - { dir: "/home/{{ bootstrap_admin_user }}/.pki/nssdb", owner: "{{ bootstrap_admin_user }}" }
+    - { dir: "/etc/skel/.pki/nssdb", owner: root }

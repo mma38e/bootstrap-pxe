@@ -1,6 +1,6 @@
 # bootstrap-pxe
 
-A self-contained provisioning kit for a Rocky Linux 9.7 bootstrap + PXE server.
+A self-contained provisioning kit for a Rocky Linux 9.8 bootstrap + PXE server.
 
 This is the **first machine** in an airgapped environment. It installs Rocky Linux,
 configures itself as an infrastructure controller with Docker and Ansible, then runs
@@ -18,13 +18,13 @@ install through PXE service deployment is handled by a single ISO.
 ```
 
 1. **`build-iso.sh`** runs on any internet-connected machine. It downloads the Rocky
-   9.7 ISO, Docker CE RPMs, ansible-runner image, builds PXE container images, and
+   9.8 ISO, Docker CE RPMs, ansible-runner image, builds PXE container images, and
    optionally downloads PXE client ISOs (Ubuntu, Rocky). Everything is packed into
    a custom bootable ISO.
 
 2. Boot the target machine from the ISO. **Anaconda** runs `bootstrap.ks`:
    - `%pre` prompts for hostname and static IP
-   - Installs Rocky 9.7 with LVM
+   - Installs Rocky 9.8 with LVM
    - `%post` places all artifacts in `/root/bootstrap/`
 
 3. After reboot, run **`bootstrap.sh`** as root:
@@ -46,9 +46,12 @@ The resulting ISO is self-contained — no internet access is needed on the targ
 
 | Artifact | Source | Notes |
 |---|---|---|
-| Rocky 9.7 DVD ISO | `download.rockylinux.org` | For installing the host OS |
+| Rocky 9.8 DVD ISO | `download.rockylinux.org` | For installing the host OS |
 | Docker CE RPMs | `download.docker.com` | docker-ce, cli, containerd, compose-plugin |
-| EPEL packages | `dl.fedoraproject.org` | htop, iotop, iperf3, minicom, screen, ntfs-3g, ntfsprogs, exfatprogs, dosfstools, fuse3 + deps |
+| EPEL packages | `dl.fedoraproject.org` | htop, iotop, iperf3, minicom, screen, ntfs-3g, ntfsprogs, exfatprogs, dosfstools, fuse3 + deps — packaged as a local dnf repo (repodata via `createrepo_c`); installed by name on the target |
+| VS Code RPM + extensions | `update.code.visualstudio.com`, `marketplace.visualstudio.com` | Remote-SSH extension pack as VSIX files, pinned to stable versions. The RPM is always re-downloaded so it meets their minimum VS Code version |
+| Google Chrome RPM | `dl.google.com` | Signature verified against Google's key at build time |
+| DoD PKI certificates | `dl.dod.cyber.mil` | DISA's unclassified PKCS#7 bundle. Signed manifest verified at build time |
 | ansible-runner image | `docker save mma38e/ansible-runner:latest` | Ansible execution container |
 | PXE container images | Built by `docker compose build` | pxe-dhcp, pxe-tftp, pxe-http |
 | Ubuntu 22.04 ISO | `releases.ubuntu.com` | Optional — for PXE clients |
@@ -162,6 +165,18 @@ Override in `ansible/group_vars/all.yml` or via `-e` flags:
 | `install_classification_banner` | `false` | Install + lock the GNOME classification banner extension. See `class_level` and `classification_banners` in `bootstrap_server/defaults/main.yml`. Banner appears at next GNOME login (existing sessions need logout/login). |
 | `class_level` | `UNCLASSIFIED` | Active classification level when the banner is installed. Must be a key in `classification_banners` (UNCLASSIFIED / CUI / CONFIDENTIAL / SECRET / TOP SECRET by default). Override per-host in inventory. |
 | `install_k8s_tools` | `false` | kubectl, helm, k9s |
+| `bootstrap_airgap_files_dir` | `/root/bootstrap/files` | Where the kickstart stages `files/` on the host. Read when `airgap_mode` is `true` |
+| `install_smartcard` | `true` | Reader drivers + OpenSC, and the pcscd socket. Chrome picks up OpenSC automatically through p11-kit. Covers browser and app use of a CAC/PIV card, not smart card OS login |
+| `smartcard_packages` | `pcsc-lite`, `pcsc-lite-ccid`, `opensc` | Packages installed by `install_smartcard` |
+| `install_dod_certs` | `true` | Trust the DoD root + intermediate CAs system-wide and in Chrome. Chrome reads per-user NSS databases, so the admin user and `/etc/skel` are configured; accounts that already exist are not |
+| `dod_certs_zip` | `unclass-certificates_pkcs7_DoD.zip` | Bundle file name. Keep in sync with `DOD_CERTS_URL` in `build-iso.sh` |
+| `dod_certs_url` | `https://dl.dod.cyber.mil/.../{{ dod_certs_zip }}` | Bundle download URL. Used only when `airgap_mode` is `false` |
+| `dod_certs_anchor` | `/etc/pki/ca-trust/source/anchors/dod-ca-bundle.pem` | Where the PEM bundle is installed |
+| `install_google_chrome` | `true` | Install Google Chrome. Its online repo is disabled, so Chrome does not self-update |
+| `google_chrome_rpm_url` | `https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm` | RPM URL. Used only when `airgap_mode` is `false` |
+| `install_vscode` | `true` | Install VS Code and `vscode_extensions` for the admin user |
+| `vscode_extensions` | Remote-SSH pack | Extension IDs, in install order. Keep in sync with `VSCODE_EXTENSIONS` in `build-iso.sh`; `ms-vscode-remote.remote-ssh` must stay last |
+| `vscode_extensions_dir` | `/opt/bootstrap/data/vscode-extensions` | Where VSIX files are staged so the admin user can read them |
 
 ### PXE server variables
 
@@ -200,7 +215,7 @@ bootstrap-pxe/
 ├── build-iso.sh              Online ISO build script (runs inside the builder container)
 ├── Dockerfile                Builder image (Rocky 9 + DinD + xorriso + isomd5sum + docker)
 ├── docker-entrypoint.sh      Boots dockerd inside the builder, then execs build-iso.sh
-├── bootstrap.ks              Rocky 9.7 kickstart (injected into ISO)
+├── bootstrap.ks              Rocky 9.8 kickstart (injected into ISO)
 ├── bootstrap.sh              Post-install (Docker + images + run Ansible)
 ├── docker-compose.yml        PXE container stack definition
 ├── containers/               PXE container Dockerfiles
@@ -229,8 +244,6 @@ See `AGENTS.md` for full architecture details and developer rules.
 - Cockpit profile for baremetal deployments
 - Full repo sync support
 - Secure Boot support for PXE clients (ship `grub-efi-amd64-signed` grubnetx64.efi.signed chained through shim; requires signed downstream kernels)
-- Google Chrome install (RPM bundled for airgap; pinned via group_vars toggle)
-- DoD PKI certificates (install DoD root + intermediate CAs into system trust store, NSSDB for Chrome/Firefox)
 - Classification banner (login/GDM + Cockpit header banner, configurable level via group_vars)
 - LibreOffice support (RPM group bundled for airgap; toggle via group_vars)
 

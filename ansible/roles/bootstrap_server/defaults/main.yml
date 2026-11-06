@@ -127,6 +127,45 @@ classification_banners:
 # TODO: verify on a real Rocky 9 install with: ls /usr/share/gnome-shell/extensions/
 classification_banner_uuid: "classification-banner@gnome-shell-extensions.gcampax.github.com"
 
+# ── Airgap artifacts ─────────────────────────────────────────────────────────
+bootstrap_airgap_files_dir: "/root/bootstrap/files"
+# Where bootstrap.ks stages files/ on the host. Read when airgap_mode is true.
+
+# ── Smart cards ──────────────────────────────────────────────────────────────
+install_smartcard: true
+# Reader drivers + OpenSC, and the pcscd socket. Covers browser and app use of a
+# CAC/PIV card, not smart card OS login.
+
+smartcard_packages:
+  - pcsc-lite
+  - pcsc-lite-ccid
+  - opensc
+
+# ── DoD PKI ──────────────────────────────────────────────────────────────────
+install_dod_certs: true
+# Adds the DoD CA bundle to the system trust store and Chrome's NSS db.
+
+dod_certs_zip: "unclass-certificates_pkcs7_DoD.zip"
+dod_certs_url: "https://dl.dod.cyber.mil/wp-content/uploads/pki-pke/zip/{{ dod_certs_zip }}"
+dod_certs_anchor: "/etc/pki/ca-trust/source/anchors/dod-ca-bundle.pem"
+
+# ── Google Chrome ────────────────────────────────────────────────────────────
+install_google_chrome: true
+google_chrome_rpm_url: "https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm"
+# Used only when airgap_mode is false.
+
+# ── VS Code ──────────────────────────────────────────────────────────────────
+install_vscode: true
+
+vscode_extensions:
+  - ms-vscode-remote.remote-ssh-edit
+  - ms-vscode.remote-explorer
+  - ms-vscode-remote.remote-ssh
+# Installed in this order for bootstrap_admin_user. Keep in sync with
+# VSCODE_EXTENSIONS in build-iso.sh, which pins their versions for airgap.
+
+vscode_extensions_dir: "{{ bootstrap_project_dir }}/data/vscode-extensions"
+
 # ── Docker ────────────────────────────────────────────────────────────────────
 # Docker CE is installed by bootstrap.sh before Ansible runs.
 # This role only ensures the service is enabled and the admin user is in the group.

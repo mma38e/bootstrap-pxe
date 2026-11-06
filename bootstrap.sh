@@ -55,8 +55,6 @@ log "Running on Rocky Linux ${OS_VERSION}"
 [[ -f "${IMAGE_TAR}" ]]  || die "ansible-runner image not found: ${IMAGE_TAR}"
 [[ -d "${ANSIBLE_DIR}" ]] || die "Ansible directory not found: ${ANSIBLE_DIR}"
 
-# ── Step 1: Install Docker CE ──────────────────────────────────────────────────
-
 # ── Step 0: Configure local media as dnf repo ────────────────────────────────
 
 log "Disabling default internet repos..."
@@ -66,7 +64,9 @@ dnf config-manager --set-disabled '*' 2>/dev/null || true
 ISO_MOUNT="/mnt/iso"
 if ! mountpoint -q "${ISO_MOUNT}" 2>/dev/null; then
     mkdir -p "${ISO_MOUNT}"
-    ISO_DEVICE=$(blkid -t TYPE=iso9660 -o device 2>/dev/null | head -1)
+    # blkid exits 2 when nothing matches — without || true, set -e kills the
+    # script here instead of reaching the "could not mount ISO" warning below.
+    ISO_DEVICE=$(blkid -t TYPE=iso9660 -o device 2>/dev/null | head -1 || true)
     if [[ -n "${ISO_DEVICE}" ]]; then
         log "Mounting ISO from ${ISO_DEVICE}..."
         mount -o ro "${ISO_DEVICE}" "${ISO_MOUNT}"
@@ -98,25 +98,31 @@ else
     log "WARNING: Could not mount ISO — dnf may not have package sources"
 fi
 
-# ── Step 1: Install Docker CE ──────────────────────────────────────────────────
+# ── Step 1: Install EPEL packages, Docker CE ─────────────────────────────────
 
-# Install EPEL packages (htop, iotop, iperf3, minicom + deps) from local RPMs
-EPEL_RPMS=("${RPM_DIR}"/epel/*.rpm)
-if [[ -e "${EPEL_RPMS[0]}" ]]; then
-    log "Installing EPEL packages from local RPMs..."
-    dnf localinstall -y "${EPEL_RPMS[@]}" || true
-else
-    log "WARNING: No EPEL RPMs found in ${RPM_DIR}/epel/"
-fi
+# Install EPEL packages by NAME from a local dnf repo, not via
+# `dnf localinstall *.rpm`. The directory also holds base-library deps that
+# `dnf download --resolve` pulled at mirror versions (newer than the DVD's);
+# force-installing every RPM put them all in one transaction, which aborted
+# on version conflicts and silently skipped htop/screen/etc. Installing by
+# name lets dnf take only what is needed and resolve base deps from the DVD
+# repos. Keep this list in sync with EPEL_PKGS in build-iso.sh.
+EPEL_PKGS=(htop iotop iperf3 minicom screen ntfs-3g ntfsprogs exfatprogs dosfstools fuse3)
 
-# Install VS Code from local RPM
-VSCODE_RPMS=("${RPM_DIR}"/vscode/*.rpm)
-if [[ -e "${VSCODE_RPMS[0]}" ]]; then
-    log "Installing VS Code from local RPM..."
-    dnf localinstall -y "${VSCODE_RPMS[@]}" || true
-else
-    log "WARNING: No VS Code RPM found in ${RPM_DIR}/vscode/"
-fi
+[[ -d "${RPM_DIR}/epel/repodata" ]] || die \
+    "No repodata in ${RPM_DIR}/epel/ — this ISO was built by a pre-1.4.0 build-iso.sh. Rebuild the ISO."
+
+log "Configuring local EPEL repo..."
+cat > /etc/yum.repos.d/local-epel.repo <<EOF
+[local-epel]
+name=EPEL packages (Local)
+baseurl=file://${RPM_DIR}/epel
+enabled=1
+gpgcheck=0
+EOF
+
+log "Installing EPEL packages from local-epel repo..."
+dnf install -y "${EPEL_PKGS[@]}"
 
 if systemctl is-active docker &>/dev/null; then
     log "Docker is already running — skipping install"
@@ -183,6 +189,20 @@ else
 fi
 
 # ── Step 6: Run Ansible playbook ─────────────────────────────────────────────
+
+# ansible-runner reaches the host over SSH using the mounted /root/.ssh.
+# Generate + authorize a root keypair so the play authenticates regardless of
+# the root password chosen at ISO build time (group_vars' ansible_ssh_pass
+# default only matches the shipped default password).
+if [[ ! -f /root/.ssh/id_ed25519 ]]; then
+    log "Generating root SSH keypair for ansible-runner..."
+    mkdir -p /root/.ssh && chmod 700 /root/.ssh
+    ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/id_ed25519
+fi
+if ! grep -qF "$(cat /root/.ssh/id_ed25519.pub)" /root/.ssh/authorized_keys 2>/dev/null; then
+    cat /root/.ssh/id_ed25519.pub >> /root/.ssh/authorized_keys
+    chmod 600 /root/.ssh/authorized_keys
+fi
 
 log "Running Ansible playbook (bootstrap_server + pxe_server roles)..."
 # Mount the full bootstrap directory so pxe_server role can tar containers/ and

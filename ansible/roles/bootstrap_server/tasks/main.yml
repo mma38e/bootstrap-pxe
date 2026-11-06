@@ -6,6 +6,14 @@
   import_tasks: packages.yml
   tags: [packages]
 
+# users.yml must precede docker.yml and directories.yml: both reference the
+# admin user, and ansible.builtin.user would otherwise create it as a locked,
+# passwordless account before "Create admin user" (with update_password:
+# on_create) gets a chance to set the password.
+- name: Configure users
+  import_tasks: users.yml
+  tags: [users]
+
 - name: Configure Docker
   import_tasks: docker.yml
   tags: [docker]
@@ -13,10 +21,6 @@
 - name: Create directory structure
   import_tasks: directories.yml
   tags: [directories]
-
-- name: Configure users
-  import_tasks: users.yml
-  tags: [users]
 
 - name: Configure services
   import_tasks: services.yml
@@ -26,6 +30,31 @@
   import_tasks: classification_banner.yml
   tags: [banner]
   when: install_classification_banner
+
+- name: Configure smart cards
+  import_tasks: smartcard.yml
+  tags: [smartcard]
+  when: install_smartcard | bool
+
+- name: Install DoD certificates
+  import_tasks: dod_certs.yml
+  tags: [dod_certs]
+  when: install_dod_certs | bool
+
+- name: Add DoD certificates to NSS databases
+  import_tasks: nssdb.yml
+  tags: [dod_certs]
+  when: install_dod_certs | bool
+
+- name: Install Google Chrome
+  import_tasks: chrome.yml
+  tags: [chrome]
+  when: install_google_chrome | bool
+
+- name: Install VS Code
+  import_tasks: vscode.yml
+  tags: [vscode]
+  when: install_vscode | bool
 
 - name: Deploy login info script
   ansible.builtin.template:

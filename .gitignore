@@ -3,6 +3,8 @@ files/images/
 files/rpms/
 files/isos/
 files/binaries/
+files/certs/
+files/vscode-extensions/
 
 # Working directories created by build-iso.sh
 work/

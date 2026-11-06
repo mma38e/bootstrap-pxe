@@ -1,5 +1,5 @@
 #!/bin/bash
-# build-iso.sh — Build a custom Rocky Linux 9.7 Bootstrap + PXE Server ISO
+# build-iso.sh — Build a custom Rocky Linux 9.8 Bootstrap + PXE Server ISO
 #
 # Prerequisites (internet-connected machine):
 #   dnf install xorriso isomd5sum curl python3 rsync
@@ -28,14 +28,26 @@ ROCKY_ISO_SHA256=""  # Will be fetched from CHECKSUM file
 DOCKER_CE_REPO="https://download.docker.com/linux/centos/9/x86_64/stable/Packages"
 EPEL_REPO_URL="https://dl.fedoraproject.org/pub/epel/9/Everything/x86_64/Packages"
 VSCODE_RPM_URL="https://update.code.visualstudio.com/latest/linux-rpm-x64/stable"
+VSCODE_MARKETPLACE_URL="https://marketplace.visualstudio.com/_apis/public/gallery/publishers"
+# Keep in sync with vscode_extensions in bootstrap_server/defaults/main.yml.
+# Pinned because the marketplace's "latest" URL serves pre-release builds, and
+# an airgapped host has no way to move off one.
+VSCODE_EXTENSIONS=(
+    ms-vscode-remote.remote-ssh-edit@0.87.0
+    ms-vscode.remote-explorer@0.5.0
+    ms-vscode-remote.remote-ssh@0.128.0
+)
+CHROME_RPM_URL="https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm"
+CHROME_KEY_URL="https://dl.google.com/linux/linux_signing_key.pub"
+DOD_CERTS_URL="https://dl.dod.cyber.mil/wp-content/uploads/pki-pke/zip/unclass-certificates_pkcs7_DoD.zip"
 
 ANSIBLE_IMAGE="${ANSIBLE_RUNNER_IMAGE:-mma38e/ansible-runner:latest}"
 
 # PXE client ISO URLs — override with environment variables if needed
 UBUNTU_ISO_URL="${UBUNTU_ISO_URL:-https://releases.ubuntu.com/22.04/ubuntu-22.04.5-live-server-amd64.iso}"
 UBUNTU_ISO_SHA256="${UBUNTU_ISO_SHA256:-9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0}"
-ROCKY_PXE_ISO_URL="${ROCKY_PXE_ISO_URL:-https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9.7-x86_64-dvd.iso}"
-ROCKY_PXE_ISO_SHA256="${ROCKY_PXE_ISO_SHA256:-d48e902325dce6793935b4e13672a0d9a4f958e02d4e23fcf0a8a34c49ef03da}"
+ROCKY_PXE_ISO_URL="${ROCKY_PXE_ISO_URL:-https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9.8-x86_64-dvd.iso}"
+ROCKY_PXE_ISO_SHA256="${ROCKY_PXE_ISO_SHA256:-d2bcbb64c2d67511adf80d40cd9543391a33aea5860a355b1d26d7f55236d01f}"
 
 DATE_TAG="$(date +%Y%m%d)"
 OUTPUT_ISO="${SCRIPT_DIR}/bootstrap-pxe-${DATE_TAG}.iso"
@@ -63,7 +75,7 @@ die()  { echo "[build-iso] ERROR: $*" >&2; exit 1; }
 
 step "Checking required tools"
 
-REQUIRED_TOOLS=(xorriso implantisomd5 curl openssl python3 docker rsync)
+REQUIRED_TOOLS=(xorriso implantisomd5 curl openssl python3 docker rsync createrepo_c rpm unzip)
 MISSING=()
 for tool in "${REQUIRED_TOOLS[@]}"; do
     if ! command -v "${tool}" &>/dev/null; then
@@ -73,7 +85,7 @@ done
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
     die "Missing required tools: ${MISSING[*]}
-  Install with: dnf install xorriso isomd5sum curl python3 rsync
+  Install with: dnf install xorriso isomd5sum curl python3 rsync createrepo_c
   Docker must be installed separately."
 fi
 
@@ -231,12 +243,22 @@ step "EPEL packages (htop, iotop, iperf3, minicom, screen, filesystem tools + de
 
 # Download EPEL RPMs using dnf on the build machine.
 # This resolves all dependencies automatically.
+# --arch keeps i686 multilib packages out of the download — the target is
+# x86_64-only, and stray i686 RPMs drag in conflicting i686 base libraries.
 EPEL_PKGS=(htop iotop iperf3 minicom screen ntfs-3g ntfsprogs exfatprogs dosfstools fuse3)
 
 log "Downloading EPEL packages and dependencies..."
 dnf download --resolve --destdir="${RPM_DIR}/epel" \
+    --arch=x86_64,noarch \
     --repo=epel --repo=baseos --repo=appstream \
     "${EPEL_PKGS[@]}" 2>&1 | tail -5
+
+# Build repo metadata so bootstrap.sh can register the directory as a local
+# dnf repo (local-epel) and install by package name. dnf then takes only what
+# each package actually needs — base-library deps that --resolve swept in at
+# mirror versions (newer than the target's DVD) stay out of the transaction.
+log "Building local-epel repo metadata (createrepo_c)..."
+createrepo_c --quiet "${RPM_DIR}/epel"
 
 log "EPEL packages ready: $(ls "${RPM_DIR}"/epel/*.rpm 2>/dev/null | wc -l) RPMs"
 
@@ -247,14 +269,83 @@ step "VS Code RPM"
 mkdir -p "${RPM_DIR}/vscode"
 VSCODE_DEST="${RPM_DIR}/vscode/code-latest.x86_64.rpm"
 
-if [[ -f "${VSCODE_DEST}" ]]; then
-    log "VS Code RPM already downloaded"
-else
-    log "Downloading VS Code RPM..."
-    curl -L --progress-bar --retry 3 -o "${VSCODE_DEST}" "${VSCODE_RPM_URL}"
-fi
+# Always re-download: the extensions below declare a minimum VS Code version,
+# so a cached RPM can be too old for them.
+log "Downloading VS Code RPM..."
+curl -L --fail --progress-bar --retry 3 -o "${VSCODE_DEST}" "${VSCODE_RPM_URL}"
 
 log "VS Code RPM ready: $(du -sh "${VSCODE_DEST}" | cut -f1)"
+
+# ── Download: VS Code extensions ─────────────────────────────────────────────
+
+step "VS Code extensions"
+
+VSCODE_EXT_DIR="${FILES_DIR}/vscode-extensions"
+mkdir -p "${VSCODE_EXT_DIR}"
+
+# The marketplace serves VSIXs gzip-encoded, hence --compressed.
+for EXT in "${VSCODE_EXTENSIONS[@]}"; do
+    EXT_ID="${EXT%@*}"
+    EXT_VERSION="${EXT#*@}"
+    log "  Downloading: ${EXT_ID} ${EXT_VERSION}"
+    curl -L --fail --compressed --silent --show-error --retry 3 \
+        -o "${VSCODE_EXT_DIR}/${EXT_ID}.vsix" \
+        "${VSCODE_MARKETPLACE_URL}/${EXT_ID%%.*}/vsextensions/${EXT_ID#*.}/${EXT_VERSION}/vspackage"
+    unzip -tq "${VSCODE_EXT_DIR}/${EXT_ID}.vsix" >/dev/null || die "Corrupt VSIX: ${EXT_ID}"
+done
+
+log "VS Code extensions ready"
+
+# ── Download: Google Chrome RPM ──────────────────────────────────────────────
+
+step "Google Chrome RPM"
+
+mkdir -p "${RPM_DIR}/chrome"
+CHROME_DEST="${RPM_DIR}/chrome/google-chrome-stable_current_x86_64.rpm"
+
+log "Downloading Google Chrome RPM..."
+curl -L --fail --progress-bar --retry 3 -o "${CHROME_DEST}" "${CHROME_RPM_URL}"
+
+log "Verifying Google Chrome RPM signature..."
+curl -L --fail --silent --show-error --retry 3 \
+    -o "${WORK_DIR}/google-signing-key.pub" "${CHROME_KEY_URL}"
+rpm --import "${WORK_DIR}/google-signing-key.pub"
+CHROME_SIG="$(rpm -K "${CHROME_DEST}")" || die "Chrome RPM signature check failed: ${CHROME_SIG}"
+[[ "${CHROME_SIG}" == *"signatures OK"* ]] || die "Chrome RPM is not signed: ${CHROME_SIG}"
+
+log "Google Chrome RPM ready: $(du -sh "${CHROME_DEST}" | cut -f1)"
+
+# ── Download: DoD PKI certificates ───────────────────────────────────────────
+
+step "DoD PKI certificates"
+
+DOD_CERTS_DIR="${FILES_DIR}/certs/dod"
+DOD_CERTS_ZIP="${DOD_CERTS_DIR}/$(basename "${DOD_CERTS_URL}")"
+mkdir -p "${DOD_CERTS_DIR}"
+
+log "Downloading DoD certificate bundle..."
+curl -L --fail --silent --show-error --retry 3 -o "${DOD_CERTS_ZIP}" "${DOD_CERTS_URL}"
+
+# DISA's documented check: a signed manifest of SHA-256 sums. The signature
+# uses SHA-1, which Rocky 9's crypto policy rejects unless explicitly allowed.
+# -no_check_time because bundles outlive their signer's certificate. This
+# catches a damaged bundle; the signing chain ships inside the same zip, so the
+# bundle's authenticity rests on the HTTPS download.
+#
+# && rather than separate lines: set -e is off in a subshell left of ||, and
+# openssl writes the manifest before it checks the signature.
+log "Verifying DoD certificate bundle..."
+DOD_VERIFY_DIR="$(mktemp -d)"
+unzip -q "${DOD_CERTS_ZIP}" -d "${DOD_VERIFY_DIR}"
+(
+    cd "${DOD_VERIFY_DIR}"/*/
+    OPENSSL_ENABLE_SHA1_SIGNATURES=1 openssl smime -verify -inform DER -no_check_time \
+        -in ./*.sha256 -CAfile DoD_PKE_CA_chain.pem -out manifest.txt \
+        && tr -d '\r' < manifest.txt | sha256sum --check --quiet
+) || die "DoD certificate bundle failed verification"
+rm -rf "${DOD_VERIFY_DIR}"
+
+log "DoD certificates ready"
 
 # ── Pull & save ansible-runner image ─────────────────────────────────────────
 
@@ -427,16 +518,27 @@ label bootstrap-usb
 ISOL
 )
     # Insert after the first 'menu' line
-    python3 - "${ISOLINUX_CFG}" "${ISOLINUX_ENTRY}" <<'PYEOF'
-import sys, pathlib
+    python3 - "${ISOLINUX_CFG}" "${ISOLINUX_ENTRY}" "${ISO_LABEL}" <<'PYEOF'
+import sys, pathlib, re
 
 cfg_path = pathlib.Path(sys.argv[1])
-new_entry = sys.argv[2]
+# $(...) in bash strips trailing newlines — restore separation so the
+# inserted block doesn't glue onto the following original line.
+new_entry = sys.argv[2].rstrip('\n') + '\n\n'
+iso_label = sys.argv[3]
 
 lines = cfg_path.read_text().splitlines(keepends=True)
 output = []
 inserted = False
 for line in lines:
+    # Drop the stock 'menu default' markers — otherwise two entries claim
+    # default and isolinux picks the stock one (media check), whose stage2
+    # label no longer exists on the relabeled ISO. Ours is the only default.
+    if line.strip() == 'menu default':
+        continue
+    # The stock entries reference the original DVD volume label, which this
+    # ISO no longer carries — repoint them so media check/rescue still work.
+    line = re.sub(r'hd:LABEL=\S+', f'hd:LABEL={iso_label}', line)
     output.append(line)
     # Insert after the line that sets the menu title / begin block
     if not inserted and line.strip().startswith('menu title'):
@@ -448,7 +550,6 @@ if not inserted:
 
 # Set timeout to 100 (10 seconds in isolinux units)
 result = ''.join(output)
-import re
 result = re.sub(r'^timeout\s+\d+', 'timeout 100', result, flags=re.MULTILINE)
 cfg_path.write_text(result)
 PYEOF
@@ -476,17 +577,22 @@ menuentry 'Bootstrap Install (USB)' --class fedora --class gnu-linux --class gnu
 
 GRUB
 )
-    python3 - "${GRUB_CFG}" "${GRUB_ENTRY}" <<'PYEOF'
+    python3 - "${GRUB_CFG}" "${GRUB_ENTRY}" "${ISO_LABEL}" <<'PYEOF'
 import sys, pathlib, re
 
 cfg_path = pathlib.Path(sys.argv[1])
 new_entry = sys.argv[2]
+iso_label = sys.argv[3]
 
 content = cfg_path.read_text()
 
 # Set default to 0 (our new entry, prepended) and timeout to 10s
 content = re.sub(r'set default="\d+"', 'set default="0"', content)
 content = re.sub(r'set timeout=\d+', 'set timeout=10', content)
+
+# Repoint the stock entries' stage2 at the relabeled volume so media
+# check/rescue still work (the original DVD label no longer exists).
+content = re.sub(r'hd:LABEL=\S+', f'hd:LABEL={iso_label}', content)
 
 # Prepend entry before the first menuentry block, ensuring a blank line separator
 entry = new_entry.rstrip('\n') + '\n\n'
@@ -503,7 +609,7 @@ log "Boot menus updated"
 step "Repackaging ISO"
 
 # Use our own short, FAT32-compatible label (ISO_LABEL) instead of Rocky's
-# 20-char "Rocky-9-7-x86_64-dvd" — Rufus would otherwise truncate or rewrite
+# 20-char "Rocky-9-8-x86_64-dvd" — Rufus would otherwise truncate or rewrite
 # it on USB write, breaking the boot menu's hd:LABEL=... lookups.
 log "Volume label: ${ISO_LABEL}"
 

@@ -1,0 +1,20 @@
+---
+# smartcard.yml — Smart card (CAC/PIV) drivers
+#
+# bootstrap.ks already pulls these in through @smart-card; they are declared
+# here so the role converges a host on its own (AGENTS.md rule #11).
+#
+# There is no per-browser setup: the opensc package registers itself with
+# p11-kit, and Rocky's crypto policy loads p11-kit into NSS programs, Chrome
+# included. Adding OpenSC to an NSS database directly fails for that reason.
+
+- name: Install smart card packages
+  ansible.builtin.dnf:
+    name: "{{ smartcard_packages }}"
+    state: present
+
+- name: Enable the PC/SC daemon socket
+  ansible.builtin.systemd:
+    name: pcscd.socket
+    enabled: true
+    state: started
