@@ -46,6 +46,12 @@ echo ""
 echo "  Cockpit web console:"
 echo "    https://${IP:-this-host}:9090"
 echo ""
+{% endif %}
+{% if install_xrdp | bool %}
+echo "  Remote desktop (RDP):"
+echo "    ${IP:-this-host}:3389"
+echo ""
+{% else %}
 echo "  Switch to graphical target (optional, requires reboot):"
 echo "    systemctl set-default graphical.target && reboot"
 echo ""

@@ -85,8 +85,10 @@ bootstrap-pxe/
         │   │   ├── dod_certs.yml       ← DoD CAs into the system trust store
         │   │   ├── nssdb.yml           ← DoD CAs into Chrome's per-user NSS dbs
         │   │   ├── chrome.yml          ← Chrome, with its online repo disabled
-        │   │   └── vscode.yml          ← VS Code + extensions for the admin user
+        │   │   ├── vscode.yml          ← VS Code + extensions for the admin user
+        │   │   └── xrdp.yml            ← xrdp, GDM, its hardening, and 3389/tcp
         │   ├── files/configure-nssdb.sh ← Idempotent NSS CA import
+        │   ├── files/xrdp-sesman.pam    ← GNOME login stack for RDP sessions
         │   ├── templates/motd.j2
         │   └── handlers/main.yml
         │
@@ -145,7 +147,7 @@ bootstrap-pxe/
 
   4. Ansible roles
        ↓ bootstrap_server: packages, Docker service, users, dirs, services,
-         smart cards, DoD certs, Chrome, VS Code
+         smart cards, DoD certs, Chrome, VS Code, xrdp
        ↓ pxe_server: stage ISOs, extract kernels, render configs, compose up
 
   5. PXE server running — clients can now network boot
@@ -165,7 +167,8 @@ The `airgap_mode` variable (default `true` in group_vars) controls whether
 `pxe_server/tasks/boot_files.yml` downloads ISOs from the internet or copies
 them from the staging directory (`airgap_iso_staging_dir`). The bootstrap_server
 Chrome, VS Code, and DoD certificate tasks follow the same split, reading from
-`bootstrap_airgap_files_dir` when it is `true`.
+`bootstrap_airgap_files_dir` when it is `true`. xrdp resolves by name from
+`local-epel` when it is `true`, and enables online EPEL when it is `false`.
 
 ### Variables and toggles
 All package installation is controlled by boolean toggles in

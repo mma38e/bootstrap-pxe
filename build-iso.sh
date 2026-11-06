@@ -239,7 +239,7 @@ log "Docker CE RPMs ready"
 
 # ── Download: EPEL packages ──────────────────────────────────────────────────
 
-step "EPEL packages (htop, iotop, iperf3, minicom, screen, filesystem tools + deps)"
+step "EPEL packages (htop, iotop, iperf3, minicom, screen, filesystem tools, xrdp + deps)"
 
 # Download EPEL RPMs using dnf on the build machine.
 # This resolves all dependencies automatically.
@@ -247,11 +247,17 @@ step "EPEL packages (htop, iotop, iperf3, minicom, screen, filesystem tools + de
 # x86_64-only, and stray i686 RPMs drag in conflicting i686 base libraries.
 EPEL_PKGS=(htop iotop iperf3 minicom screen ntfs-3g ntfsprogs exfatprogs dosfstools fuse3)
 
+# Installed by the role, not bootstrap.sh, so install_xrdp: false leaves xrdp off.
+# Keep in sync with xrdp_packages in bootstrap_server/defaults/main.yml. The
+# SELinux policy is named because xrdp-selinux needs a newer one than the DVD
+# has, and --resolve skips it: the builder already has it installed.
+XRDP_PKGS=(xrdp xorgxrdp xrdp-selinux selinux-policy selinux-policy-targeted)
+
 log "Downloading EPEL packages and dependencies..."
 dnf download --resolve --destdir="${RPM_DIR}/epel" \
     --arch=x86_64,noarch \
     --repo=epel --repo=baseos --repo=appstream \
-    "${EPEL_PKGS[@]}" 2>&1 | tail -5
+    "${EPEL_PKGS[@]}" "${XRDP_PKGS[@]}" 2>&1 | tail -5
 
 # Build repo metadata so bootstrap.sh can register the directory as a local
 # dnf repo (local-epel) and install by package name. dnf then takes only what

@@ -37,7 +37,6 @@
     owner: root
     group: root
     mode: "0644"
-  notify: dconf update
 
 - name: Render classification banner dconf settings
   ansible.builtin.template:
@@ -46,7 +45,6 @@
     owner: root
     group: root
     mode: "0644"
-  notify: dconf update
 
 - name: Lock classification banner keys (prevents user override)
   ansible.builtin.copy:
@@ -61,4 +59,9 @@
     owner: root
     group: root
     mode: "0644"
-  notify: dconf update
+
+# Run every time rather than from a handler: a failure later in the play would
+# drop the handler, and a re-run sees no changed file, so the banner never shows.
+- name: Compile the dconf database
+  ansible.builtin.command: dconf update
+  changed_when: false

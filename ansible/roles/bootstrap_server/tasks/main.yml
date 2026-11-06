@@ -56,6 +56,11 @@
   tags: [vscode]
   when: install_vscode | bool
 
+- name: Configure xrdp
+  import_tasks: xrdp.yml
+  tags: [xrdp]
+  when: install_xrdp | bool
+
 - name: Deploy login info script
   ansible.builtin.template:
     src: motd.j2

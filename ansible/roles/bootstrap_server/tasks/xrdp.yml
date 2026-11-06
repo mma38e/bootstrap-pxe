@@ -1,0 +1,79 @@
+---
+# xrdp.yml — RDP access to the host from a Windows desktop
+#
+# Airgapped, the packages resolve from local-epel, which bootstrap.sh registers.
+# Online, they need EPEL enabled here: nothing else in the role enables it.
+#
+# xrdp-selinux must be named: it is only a Recommends, so dnf skips it quietly,
+# and under SELinux enforcing the desktop then fails with "X server could not be
+# started". xrdp-sesman needs no task of its own: xrdp starts it.
+
+- name: Enable the EPEL repo
+  ansible.builtin.dnf:
+    name: epel-release
+    state: present
+  when: not (airgap_mode | default(false) | bool)
+
+- name: Install xrdp packages
+  ansible.builtin.dnf:
+    name: "{{ xrdp_packages }}"
+    state: present
+
+# The stock PAM file does not unlock the GNOME keyring, so Chrome prompts for a
+# keyring password at every login.
+- name: Use the GNOME login stack for xrdp sessions
+  ansible.builtin.copy:
+    src: xrdp-sesman.pam
+    dest: /etc/pam.d/xrdp-sesman
+    owner: root
+    group: root
+    mode: "0644"
+  register: xrdp_pam
+
+- name: Require TLS for RDP connections
+  ansible.builtin.lineinfile:
+    path: /etc/xrdp/xrdp.ini
+    regexp: '^security_layer='
+    line: security_layer=tls
+  register: xrdp_tls
+
+- name: Refuse root logins over RDP
+  ansible.builtin.lineinfile:
+    path: /etc/xrdp/sesman.ini
+    regexp: '^AllowRootLogin='
+    line: AllowRootLogin=false
+  register: xrdp_root
+
+# GDM provides the screen lock. Without it an RDP desktop works but cannot lock,
+# by hand or when idle.
+- name: Read the default boot target
+  ansible.builtin.command: systemctl get-default
+  register: xrdp_default_target
+  changed_when: false
+
+- name: Boot to the graphical target
+  ansible.builtin.command: systemctl set-default graphical.target
+  when: xrdp_default_target.stdout != 'graphical.target'
+
+- name: Start the display manager
+  ansible.builtin.systemd:
+    name: gdm
+    enabled: true
+    state: started
+
+# Direct rather than a handler: a handler would be lost if anything later in the
+# play failed. Restart only on a real change, because it ends live RDP sessions.
+- name: Enable and start xrdp
+  ansible.builtin.systemd:
+    name: xrdp
+    enabled: true
+    state: "{{ 'restarted' if (xrdp_pam is changed or xrdp_tls is changed or xrdp_root is changed) else 'started' }}"
+
+# No ignore_errors: a port that failed to open looks like a broken xrdp from the
+# Windows side, so it has to fail here instead.
+- name: Open firewall for RDP (port 3389)
+  ansible.posix.firewalld:
+    port: 3389/tcp
+    permanent: true
+    state: enabled
+    immediate: true

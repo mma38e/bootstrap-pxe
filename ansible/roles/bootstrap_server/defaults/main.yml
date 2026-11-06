@@ -166,6 +166,17 @@ vscode_extensions:
 
 vscode_extensions_dir: "{{ bootstrap_project_dir }}/data/vscode-extensions"
 
+# ── xrdp ─────────────────────────────────────────────────────────────────────
+install_xrdp: true
+# RDP access from a Windows desktop. Opens 3389/tcp in firewalld, so firewalld
+# must be running.
+
+xrdp_packages:
+  - xrdp
+  - xorgxrdp
+  - xrdp-selinux
+# Keep in sync with XRDP_PKGS in build-iso.sh.
+
 # ── Docker ────────────────────────────────────────────────────────────────────
 # Docker CE is installed by bootstrap.sh before Ansible runs.
 # This role only ensures the service is enabled and the admin user is in the group.

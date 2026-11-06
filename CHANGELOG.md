@@ -11,6 +11,29 @@ provisioned host at install time as `/etc/bootstrap-pxe-release`. See
 
 ---
 
+## [1.6.0] — 2026-11-06
+
+### Added
+- add: xrdp, so a Windows desktop can RDP into the host and get a GNOME desktop
+  (`install_xrdp`, `xrdp_packages`, `tasks/xrdp.yml`). Installed by the role only,
+  so `install_xrdp: false` leaves it off. `build-iso.sh` bundles `xrdp-selinux` and
+  the newer SELinux policy it needs. Sessions use the GNOME PAM stack so the keyring
+  unlocks.
+
+### Changed
+- change: xrdp requires TLS and refuses root logins. NLA is not supported, so a
+  Windows client that requires it cannot connect.
+- change: with `install_xrdp` on, the host boots to `graphical.target` and runs GDM.
+  An RDP session cannot lock without it.
+
+### Fixed
+- fix: the classification banner could silently never appear. `dconf update` ran
+  from a handler, which was lost whenever a later task failed, and a re-run saw no
+  changed file and never fired it again. It now runs directly on every pass, which
+  also repairs affected hosts.
+
+---
+
 ## [1.5.0] — 2026-11-06
 
 ### Added

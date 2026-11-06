@@ -48,7 +48,7 @@ The resulting ISO is self-contained — no internet access is needed on the targ
 |---|---|---|
 | Rocky 9.8 DVD ISO | `download.rockylinux.org` | For installing the host OS |
 | Docker CE RPMs | `download.docker.com` | docker-ce, cli, containerd, compose-plugin |
-| EPEL packages | `dl.fedoraproject.org` | htop, iotop, iperf3, minicom, screen, ntfs-3g, ntfsprogs, exfatprogs, dosfstools, fuse3 + deps — packaged as a local dnf repo (repodata via `createrepo_c`); installed by name on the target |
+| EPEL packages | `dl.fedoraproject.org` | htop, iotop, iperf3, minicom, screen, ntfs-3g, ntfsprogs, exfatprogs, dosfstools, fuse3, xrdp, xorgxrdp, xrdp-selinux, and a newer SELinux policy for it + deps — packaged as a local dnf repo (repodata via `createrepo_c`); installed by name on the target |
 | VS Code RPM + extensions | `update.code.visualstudio.com`, `marketplace.visualstudio.com` | Remote-SSH extension pack as VSIX files, pinned to stable versions. The RPM is always re-downloaded so it meets their minimum VS Code version |
 | Google Chrome RPM | `dl.google.com` | Signature verified against Google's key at build time |
 | DoD PKI certificates | `dl.dod.cyber.mil` | DISA's unclassified PKCS#7 bundle. Signed manifest verified at build time |
@@ -177,6 +177,8 @@ Override in `ansible/group_vars/all.yml` or via `-e` flags:
 | `install_vscode` | `true` | Install VS Code and `vscode_extensions` for the admin user |
 | `vscode_extensions` | Remote-SSH pack | Extension IDs, in install order. Keep in sync with `VSCODE_EXTENSIONS` in `build-iso.sh`; `ms-vscode-remote.remote-ssh` must stay last |
 | `vscode_extensions_dir` | `/opt/bootstrap/data/vscode-extensions` | Where VSIX files are staged so the admin user can read them |
+| `install_xrdp` | `true` | RDP access from a Windows desktop: installs `xrdp_packages`, requires TLS, refuses root logins, sets the graphical boot target so sessions can lock, and opens 3389/tcp in firewalld, which must be running. See [Remote desktop](#remote-desktop) |
+| `xrdp_packages` | `xrdp`, `xorgxrdp`, `xrdp-selinux` | Packages installed by `install_xrdp`. Keep in sync with `XRDP_PKGS` in `build-iso.sh`. `xrdp-selinux` must stay listed: without it the desktop fails under SELinux enforcing |
 
 ### PXE server variables
 
@@ -187,6 +189,22 @@ Override in `ansible/group_vars/all.yml` or via `-e` flags:
 | `dhcp_enabled` | `false` | false=proxyDHCP, true=standalone DHCP |
 | `ubuntu2204_enabled` | `true` | Enable Ubuntu PXE boot entries |
 | `rocky9_enabled` | `true` | Enable Rocky PXE boot entries |
+
+### Remote desktop
+
+Connect from Windows with Remote Desktop to `<host-ip>:3389` and log in as the
+admin user. The session is GNOME on X11, with the classification banner.
+
+- **NLA is not supported.** A Windows client whose policy requires Network Level
+  Authentication will fail to connect.
+- **Expect a certificate warning.** xrdp uses a self-signed certificate that it
+  generates once, at install.
+- **One session per user.** With a user at the console, an RDP login as that user
+  connects and then drops about two seconds later with no message. With a user on
+  RDP, including a disconnected session, the console login offers `Force Stop`,
+  which ends the RDP session. Different users can be on at the same time.
+- **Log noise.** `gsd-smartcard` logs repeated PC/SC refusals during RDP sessions.
+  This is harmless. Smart cards are not available inside an RDP session.
 
 ### Re-running Ansible only
 
