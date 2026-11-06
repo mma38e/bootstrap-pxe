@@ -54,6 +54,9 @@ bootstrap-pxe/
 │
 ├── docker-compose.yml    ← PXE container stack (dhcp, tftp, http)
 │
+├── docs/
+│   └── pxe-server-fixes.md ← Planned PXE fixes and xrdp work, not yet implemented
+│
 ├── containers/           ← PXE container Dockerfiles
 │   ├── dhcp/             ← alpine + dnsmasq (proxyDHCP or standalone)
 │   ├── tftp/             ← multi-stage: ubuntu (grub/syslinux) → alpine (tftpd)

@@ -311,6 +311,8 @@ See `AGENTS.md` for full architecture details and developer rules.
 - Secure Boot support for PXE clients (ship `grub-efi-amd64-signed` grubnetx64.efi.signed chained through shim; requires signed downstream kernels)
 - Classification banner (login/GDM + Cockpit header banner, configurable level via group_vars)
 - LibreOffice support (RPM group bundled for airgap; toggle via group_vars)
+- xrdp, so a Windows desktop can RDP into the host (see `docs/pxe-server-fixes.md`)
+- PXE server fixes (see `docs/pxe-server-fixes.md`)
 
 ---
 
