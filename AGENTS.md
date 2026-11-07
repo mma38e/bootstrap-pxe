@@ -7,10 +7,15 @@ AI agents and human contributors. It must be kept up to date as the repo evolves
 
 ## Repository Purpose
 
-`bootstrap-pxe` is a self-contained kit to provision a Rocky Linux 9.8 machine as
-an infrastructure bootstrap node **and** PXE boot server. It is the **first machine**
-in an airgapped environment — it hosts the `ansible-runner` container, drives Ansible
-against all other machines, and PXE-boots them over the network.
+`bootstrap-pxe` is a self-contained kit that installs a Rocky Linux 9.8 machine from
+one ISO, with no internet access, as one of two **install profiles** chosen at the
+boot menu:
+
+- `bare_metal`: an infrastructure bootstrap node, hypervisor, **and** PXE boot server
+  with a GNOME desktop. It is the **first machine** in an airgapped environment — it
+  hosts the `ansible-runner` container, drives Ansible against all other machines,
+  and PXE-boots them over the network.
+- `docker_vm`: a low-overhead Docker host in a VM, on `multi-user.target`.
 
 This repo combines what was previously `bootstrap-server` and `pxe-server` into a
 single project with two Ansible roles.
@@ -38,13 +43,14 @@ bootstrap-pxe/
 │                           repackages into a custom bootable ISO.
 │
 ├── bootstrap.ks          ← KICKSTART: embedded in the ISO by build-iso.sh.
-│                           Runs during Anaconda install. %pre prompts for
+│                           Runs during Anaconda install. %pre reads the install
+│                           profile, writes its package list, and prompts for
 │                           static IP. %post (--nochroot) copies all artifacts
-│                           to /root/bootstrap/.
+│                           to /root/bootstrap/ and stamps the profile.
 │
 ├── bootstrap.sh          ← POST-INSTALL: run as root after first login.
 │                           Installs Docker CE from local RPMs, loads all
-│                           container images, then runs both Ansible roles.
+│                           container images, then runs Ansible for the profile.
 │
 ├── docker-compose.yml    ← PXE container stack (dhcp, tftp, http)
 │
@@ -70,23 +76,27 @@ bootstrap-pxe/
     ├── inventory.ini     ← Host entry with __BOOTSTRAP_IP__ placeholder
     ├── inventory.example ← Template for customisation
     ├── group_vars/
-    │   └── all.yml       ← SSH settings, bootstrap vars, PXE vars
+    │   ├── all.yml       ← SSH settings, bootstrap vars, PXE vars
+    │   └── docker_vm.yml ← docker_vm profile: turns off what it does not use
     └── roles/
         ├── bootstrap_server/           ← Role 1: Host setup
         │   ├── defaults/main.yml       ← Tool toggles + defaults
         │   ├── tasks/
         │   │   ├── main.yml            ← Orchestration (imports + tags)
         │   │   ├── packages.yml        ← Tool installation
-        │   │   ├── docker.yml          ← Docker service + group
+        │   │   ├── docker.yml          ← Docker install, service, group
         │   │   ├── directories.yml     ← /opt/bootstrap tree
         │   │   ├── users.yml           ← Admin user, sudo
         │   │   ├── services.yml        ← httpd, tftp, sshd
+        │   │   ├── desktop.yml         ← GNOME, GDM, graphical boot target
+        │   │   ├── hypervisor.yml      ← KVM, libvirt, management tools
+        │   │   ├── guest_agents.yml    ← qemu-guest-agent, open-vm-tools
         │   │   ├── smartcard.yml       ← Reader drivers, OpenSC, pcscd
         │   │   ├── dod_certs.yml       ← DoD CAs into the system trust store
         │   │   ├── nssdb.yml           ← DoD CAs into Chrome's per-user NSS dbs
         │   │   ├── chrome.yml          ← Chrome, with its online repo disabled
         │   │   ├── vscode.yml          ← VS Code + extensions for the admin user
-        │   │   └── xrdp.yml            ← xrdp, GDM, its hardening, and 3389/tcp
+        │   │   └── xrdp.yml            ← xrdp, its hardening, and 3389/tcp
         │   ├── files/configure-nssdb.sh ← Idempotent NSS CA import
         │   ├── files/xrdp-sesman.pam    ← GNOME login stack for RDP sessions
         │   ├── templates/motd.j2
@@ -130,10 +140,13 @@ bootstrap-pxe/
 
 [Target machine — boot from ISO]
   2. Anaconda kickstart (bootstrap.ks)
-       ↓ %pre: prompts for hostname + static IP
+       ↓ boot menu entry sets bootstrap.profile= on the kernel command line
+       ↓ %pre: validates the profile, writes /tmp/packages.ks for %packages,
+         prompts for hostname + static IP
        ↓ installs Rocky 9.8 with LVM
        ↓ %post: copies bootstrap.sh, ansible/, files/, containers/,
-         docker-compose.yml to /root/bootstrap/
+         docker-compose.yml to /root/bootstrap/, writes PROFILE= to
+         /etc/bootstrap-pxe-release
 
 [Target machine — after reboot]
   3. cd /root/bootstrap && ./bootstrap.sh
@@ -141,26 +154,39 @@ bootstrap-pxe/
          local-appstream) and registers files/rpms/epel as local-epel
        ↓ installs EPEL packages by name from local-epel
        ↓ installs Docker CE from local RPMs
-       ↓ docker load ansible-runner.tar + pxe-images.tar
-       ↓ injects host IP into inventory + group_vars
+       ↓ docker load ansible-runner.tar + pxe-images.tar (bare_metal only)
+       ↓ injects host IP + profile group into inventory, IP into group_vars
        ↓ docker run ansible-runner → ansible-playbook site.yml
 
   4. Ansible roles
-       ↓ bootstrap_server: packages, Docker service, users, dirs, services,
-         smart cards, DoD certs, Chrome, VS Code, xrdp
-       ↓ pxe_server: stage ISOs, extract kernels, render configs, compose up
+       ↓ bootstrap_server: packages, Docker, users, dirs, services, then what
+         the profile enables: desktop, hypervisor, guest agents, smart cards,
+         DoD certs, Chrome, VS Code, xrdp
+       ↓ pxe_server (bare_metal only): stage ISOs, extract kernels, render
+         configs, compose up
 
-  5. PXE server running — clients can now network boot
+  5. bare_metal: PXE server running — clients can now network boot
+     docker_vm: Docker host ready
 ```
 
 ---
 
 ## Key Conventions
 
+### Install profiles
+A profile is a package list in `bootstrap.ks` plus a set of toggles. Role defaults
+describe `bare_metal`. `group_vars/docker_vm.yml` turns off what a Docker VM does not
+use, and it wins over `group_vars/all.yml` because the host is in that inventory
+group. To add a profile: add a case to `%pre` in `bootstrap.ks`, a boot menu entry in
+`build-iso.sh`, the name in the `bootstrap.sh` profile check, and a
+`group_vars/<profile>.yml`. `ksvalidator` cannot see inside `/tmp/packages.ks`, so a
+misspelled group only fails at install: test each profile.
+
 ### Two roles, one playbook
 The `bootstrap_server` and `pxe_server` roles are kept independent. They can
-be run together (default) or individually using tags. The pxe_server role's
-docker.yml harmlessly skips when Docker is already present.
+be run together (default) or individually using tags. `pxe_server` runs only when
+`install_pxe_server` is true. Its docker.yml harmlessly skips when Docker is already
+present: `bootstrap_server` owns the Docker install.
 
 ### Airgap mode
 The `airgap_mode` variable (default `true` in group_vars) controls whether
@@ -179,6 +205,7 @@ variables in `ansible/roles/pxe_server/defaults/main.yml`.
 - **Role defaults** (`defaults/main.yml`): base values shipped with each role.
 - **group_vars/all.yml**: site-specific overrides — SSH settings, admin user,
   PXE network config, OS toggles, extra profiles.
+- **group_vars/docker_vm.yml**: overrides for that install profile only.
 
 ### Profile system (PXE)
 - Base profiles: `rocky9_profiles`, `ubuntu2204_profiles` — in pxe_server defaults.

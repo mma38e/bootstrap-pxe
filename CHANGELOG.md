@@ -11,6 +11,55 @@ provisioned host at install time as `/etc/bootstrap-pxe-release`. See
 
 ---
 
+## [1.7.0] — 2026-11-07
+
+### Added
+- add: two install profiles from one ISO, chosen at the boot menu. `bare_metal` is
+  the GUI bootstrap server with hypervisor and PXE. `docker_vm` is a low-overhead
+  Docker host on `multi-user.target`: Docker, the shared CLI tools, and guest agents.
+  The choice sets the kickstart packages through `bootstrap.profile=` and is stamped
+  as `PROFILE=` in `/etc/bootstrap-pxe-release`. `bootstrap.sh` puts the host in the
+  matching inventory group, and `group_vars/docker_vm.yml` turns off what it does not
+  use.
+- add: `install_desktop`, `install_hypervisor`, `install_guest_agents`, and
+  `install_pxe_server` toggles, with `tasks/desktop.yml`, `tasks/hypervisor.yml`, and
+  `tasks/guest_agents.yml`.
+
+### Changed
+- change: the boot menu has one entry per profile, replacing the CD-ROM and USB
+  entries. Each finds the media by label, which works on CD, virtual media, and USB.
+- change: the role now declares Docker, GNOME, libvirt, and Cockpit, which only
+  `pxe_server` or the kickstart installed before. `bootstrap_server` owns the Docker
+  install, so skipping `pxe_server` keeps it.
+- change: `brasero` moved from `baseline_packages` to `desktop_packages`, and
+  `install_xrdp` now requires `install_desktop`.
+- change: `bootstrap.sh` finds the ISO by label, so a VM's guest tools ISO is not
+  mounted by mistake, and stops if it cannot mount it. It stops if the host has no
+  install profile, so a host from a pre-1.7.0 ISO cannot run it.
+
+### Fixed
+- fix: the ISO could not boot from a USB stick. The output had no boot record or GPT,
+  so a stick written with Rufus DD mode or `dd` was not bootable, despite the README.
+  The build now reuses the stock ISO's boot area, and updates `grub.cfg` inside
+  `images/efiboot.img`, which still held the stock menu and old label.
+- fix: `dnf install` failed after a reboot with a misleading "incorrect checksum"
+  error, because the ISO was not remounted. `bootstrap.sh` now adds a `nofail` fstab
+  entry.
+- fix: `Create admin user home subdirectories` and `Ensure .ssh directory has correct
+  permissions` flipped the `.ssh` mode and reported changes on every run.
+- fix: the role's bare `when:` conditionals failed on string overrides such as
+  `-e install_baseline=false` under ansible-core 2.19.
+- fix: the README re-run command mounted only `ansible/`, which breaks `pxe_server`.
+  `--tags pxe` was documented but matches nothing.
+
+### Notes
+- The PXE server still has the faults in the `fix/pxe-server` notes: `bootstrap.sh`
+  fails on `bare_metal` with no client ISOs staged, and `pxe-dhcp` crash-loops.
+- Tested on UEFI and BIOS VMs with no network, over virtual CD and simulated USB,
+  for both profiles. Not tested on real hardware, a real USB stick, or VMware.
+
+---
+
 ## [1.6.0] — 2026-11-06
 
 ### Added

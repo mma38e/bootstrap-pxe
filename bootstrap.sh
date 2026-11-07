@@ -48,6 +48,13 @@ fi
 OS_VERSION=$(grep "^VERSION_ID=" /etc/os-release | cut -d'"' -f2)
 [[ "${OS_VERSION}" == 9* ]] || die "Requires Rocky Linux 9.x (found ${OS_VERSION})"
 
+# The install profile was chosen at the ISO boot menu and stamped by bootstrap.ks.
+PROFILE=$(sed -n 's/^PROFILE="\(.*\)"$/\1/p' /etc/bootstrap-pxe-release 2>/dev/null || true)
+case "${PROFILE}" in
+    bare_metal|docker_vm) log "Install profile: ${PROFILE}" ;;
+    *) die "No install profile in /etc/bootstrap-pxe-release. Was this host installed from a pre-1.7.0 ISO?" ;;
+esac
+
 log "Running on Rocky Linux ${OS_VERSION}"
 
 # Verify required directories
@@ -62,15 +69,17 @@ dnf config-manager --set-disabled '*' 2>/dev/null || true
 
 # Mount the ISO if not already mounted
 ISO_MOUNT="/mnt/iso"
+ISO_LABEL="BSTRAP_PXE"  # Keep in sync with build-iso.sh
 if ! mountpoint -q "${ISO_MOUNT}" 2>/dev/null; then
     mkdir -p "${ISO_MOUNT}"
+    # By label, because a VM can have other ISOs attached, such as guest tools.
     # blkid exits 2 when nothing matches — without || true, set -e kills the
-    # script here instead of reaching the "could not mount ISO" warning below.
-    ISO_DEVICE=$(blkid -t TYPE=iso9660 -o device 2>/dev/null | head -1 || true)
+    # script here instead of reaching the "could not mount ISO" error below.
+    ISO_DEVICE=$(blkid -L "${ISO_LABEL}" 2>/dev/null | head -1 || true)
     if [[ -n "${ISO_DEVICE}" ]]; then
         log "Mounting ISO from ${ISO_DEVICE}..."
         mount -o ro "${ISO_DEVICE}" "${ISO_MOUNT}"
-    elif [[ -f /dev/cdrom ]]; then
+    elif [[ -b /dev/cdrom ]]; then
         log "Mounting /dev/cdrom..."
         mount -o ro /dev/cdrom "${ISO_MOUNT}"
     fi
@@ -78,6 +87,12 @@ fi
 
 # Create local repo files for BaseOS and AppStream from the mounted ISO
 if mountpoint -q "${ISO_MOUNT}" 2>/dev/null; then
+    # Remount after a reboot, or dnf fails with a misleading "incorrect checksum"
+    # error. nofail so the host still boots with the ISO detached.
+    if ! grep -qs "^LABEL=${ISO_LABEL} " /etc/fstab; then
+        echo "LABEL=${ISO_LABEL} ${ISO_MOUNT} iso9660 ro,nofail,x-systemd.device-timeout=10s 0 0" >> /etc/fstab
+    fi
+
     log "Configuring local BaseOS repo..."
     cat > /etc/yum.repos.d/local-baseos.repo <<EOF
 [local-baseos]
@@ -95,7 +110,7 @@ enabled=1
 gpgcheck=0
 EOF
 else
-    log "WARNING: Could not mount ISO — dnf may not have package sources"
+    die "Could not mount the install ISO (label ${ISO_LABEL}). Keep it attached: it is the package source for this host."
 fi
 
 # ── Step 1: Install EPEL packages, Docker CE ─────────────────────────────────
@@ -147,7 +162,9 @@ fi
 
 # ── Step 3: Load PXE container images ────────────────────────────────────────
 
-if [[ -f "${PXE_IMAGE_TAR}" ]]; then
+if [[ "${PROFILE}" != "bare_metal" ]]; then
+    log "Skipping PXE container images: not used by the ${PROFILE} profile"
+elif [[ -f "${PXE_IMAGE_TAR}" ]]; then
     if docker image inspect pxe-dhcp:local &>/dev/null; then
         log "PXE container images already loaded — skipping"
     else
@@ -161,7 +178,9 @@ fi
 
 # ── Step 4: Stage PXE client ISOs ────────────────────────────────────────────
 
-if [[ -d "${PXE_ISO_DIR}" ]] && ls "${PXE_ISO_DIR}"/*.iso &>/dev/null; then
+if [[ "${PROFILE}" != "bare_metal" ]]; then
+    log "Skipping PXE client ISOs: not used by the ${PROFILE} profile"
+elif [[ -d "${PXE_ISO_DIR}" ]] && ls "${PXE_ISO_DIR}"/*.iso &>/dev/null; then
     log "PXE client ISOs found — they will be copied by Ansible during the pxe_server role"
 else
     log "No PXE client ISOs found in ${PXE_ISO_DIR}/"
@@ -175,11 +194,14 @@ HOST_IP=$(hostname -I | awk '{print $1}')
 [[ -n "${HOST_IP}" ]] || die "Could not determine host IP address"
 
 log "Updating inventory with host IP: ${HOST_IP}"
-sed -i "s|__BOOTSTRAP_IP__|${HOST_IP}|g" "${ANSIBLE_DIR}/${INVENTORY}"
+sed -i -e "s|__BOOTSTRAP_IP__|${HOST_IP}|g" \
+    -e "s|__BOOTSTRAP_PROFILE__|${PROFILE}|g" "${ANSIBLE_DIR}/${INVENTORY}"
 
 # Also set pxe_server_ip to match host IP in group_vars
 # (pxe_server role needs this to configure boot menus and DHCP)
-if grep -q 'pxe_server_ip:' "${ANSIBLE_DIR}/group_vars/all.yml" 2>/dev/null; then
+if [[ "${PROFILE}" != "bare_metal" ]]; then
+    log "Skipping pxe_server_ip: not used by the ${PROFILE} profile"
+elif grep -q 'pxe_server_ip:' "${ANSIBLE_DIR}/group_vars/all.yml" 2>/dev/null; then
     log "pxe_server_ip already set in group_vars"
 else
     log "Setting pxe_server_ip=${HOST_IP} in group_vars"
@@ -216,17 +238,19 @@ docker run --rm -i \
     "${ANSIBLE_IMAGE}" \
     ansible-playbook -i "${INVENTORY}" "${PLAYBOOK}"
 
-log "Bootstrap + PXE server setup complete."
+log "Setup complete (profile: ${PROFILE})."
 log ""
 log "Next steps:"
 log "  1. Change the admin password (default is 'password'):"
 log "       passwd cloud"
-log ""
-log "  2. Cockpit web console:"
-log "       https://${HOST_IP}:9090"
-log ""
-log "  3. Remote desktop (RDP), unless install_xrdp is false:"
-log "       ${HOST_IP}:3389"
-log ""
-log "  PXE clients can now network boot from this server."
+if [[ "${PROFILE}" == "bare_metal" ]]; then
+    log ""
+    log "  2. Cockpit web console:"
+    log "       https://${HOST_IP}:9090"
+    log ""
+    log "  3. Remote desktop (RDP), unless install_xrdp is false:"
+    log "       ${HOST_IP}:3389"
+    log ""
+    log "  PXE clients can now network boot from this server."
+fi
 log "  Log out and back in to see the post-setup quick reference."

@@ -8,6 +8,13 @@
 # and under SELinux enforcing the desktop then fails with "X server could not be
 # started". xrdp-sesman needs no task of its own: xrdp starts it.
 
+# GDM provides the screen lock. Without it an RDP desktop works but cannot lock,
+# by hand or when idle.
+- name: Check that xrdp has a desktop
+  ansible.builtin.assert:
+    that: install_desktop | bool
+    fail_msg: "install_xrdp needs install_desktop: there is no desktop to connect to."
+
 - name: Enable the EPEL repo
   ansible.builtin.dnf:
     name: epel-release
@@ -43,23 +50,6 @@
     regexp: '^AllowRootLogin='
     line: AllowRootLogin=false
   register: xrdp_root
-
-# GDM provides the screen lock. Without it an RDP desktop works but cannot lock,
-# by hand or when idle.
-- name: Read the default boot target
-  ansible.builtin.command: systemctl get-default
-  register: xrdp_default_target
-  changed_when: false
-
-- name: Boot to the graphical target
-  ansible.builtin.command: systemctl set-default graphical.target
-  when: xrdp_default_target.stdout != 'graphical.target'
-
-- name: Start the display manager
-  ansible.builtin.systemd:
-    name: gdm
-    enabled: true
-    state: started
 
 # Direct rather than a handler: a handler would be lost if anything later in the
 # play failed. Restart only on a real change, because it ends live RDP sessions.

@@ -1,0 +1,11 @@
+---
+# guest_agents.yml — Agents that let a hypervisor manage this VM
+#
+# Installed but deliberately not started: each agent only works on its own
+# hypervisor, so starting qemu-guest-agent on VMware would fail. The packages'
+# presets and udev rules start the right one.
+
+- name: Install guest agents
+  ansible.builtin.dnf:
+    name: "{{ guest_agent_packages }}"
+    state: present

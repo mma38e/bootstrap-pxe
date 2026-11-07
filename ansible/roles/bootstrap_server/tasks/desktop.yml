@@ -1,0 +1,26 @@
+---
+# desktop.yml — GNOME desktop on a graphical boot target
+#
+# On a bare_metal install the kickstart has already laid down the full graphical
+# environment, so the package task is a no-op there. It stays so the role can
+# converge a host on its own (AGENTS.md rule #11).
+
+- name: Install desktop packages
+  ansible.builtin.dnf:
+    name: "{{ desktop_packages }}"
+    state: present
+
+- name: Read the default boot target
+  ansible.builtin.command: systemctl get-default
+  register: desktop_default_target
+  changed_when: false
+
+- name: Boot to the graphical target
+  ansible.builtin.command: systemctl set-default graphical.target
+  when: desktop_default_target.stdout != 'graphical.target'
+
+- name: Start the display manager
+  ansible.builtin.systemd:
+    name: gdm
+    enabled: true
+    state: started

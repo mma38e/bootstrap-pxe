@@ -10,6 +10,7 @@ RUN dnf install -y --setopt=install_weak_deps=False --nodocs \
         isomd5sum \
         createrepo_c \
         rsync \
+        mtools \
         unzip \
         iptables-nft \
         docker-ce \

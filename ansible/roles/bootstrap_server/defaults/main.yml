@@ -42,8 +42,9 @@ baseline_packages:
   - unzip
   - tar
   - bash-completion
+  - sudo
+  - python3-libselinux
   - tmux
-  - brasero
   - zstd
   # Dev / build
   - python3
@@ -127,6 +128,46 @@ classification_banners:
 # TODO: verify on a real Rocky 9 install with: ls /usr/share/gnome-shell/extensions/
 classification_banner_uuid: "classification-banner@gnome-shell-extensions.gcampax.github.com"
 
+# ── Desktop ──────────────────────────────────────────────────────────────────
+install_desktop: true
+# GNOME, GDM, and the graphical boot target. install_xrdp needs this.
+
+desktop_packages:
+  - gdm
+  - gnome-shell
+  - gnome-session-xsession
+  - gnome-terminal
+  - nautilus
+  - brasero
+
+# ── Hypervisor ───────────────────────────────────────────────────────────────
+install_hypervisor: true
+# KVM, libvirt, and the management tools.
+
+hypervisor_packages:
+  - qemu-kvm
+  - libvirt
+  - libvirt-client
+  - libguestfs
+  - virt-install
+  - virt-manager
+  - virt-viewer
+  - virt-top
+  - cockpit-machines
+
+hypervisor_services:
+  - virtqemud.socket
+  - virtnetworkd.socket
+  - virtstoraged.socket
+
+# ── Guest agents ─────────────────────────────────────────────────────────────
+install_guest_agents: false
+# For a host that is itself a VM. Off here, on in group_vars/docker_vm.yml.
+
+guest_agent_packages:
+  - qemu-guest-agent
+  - open-vm-tools
+
 # ── Airgap artifacts ─────────────────────────────────────────────────────────
 bootstrap_airgap_files_dir: "/root/bootstrap/files"
 # Where bootstrap.ks stages files/ on the host. Read when airgap_mode is true.
@@ -178,15 +219,20 @@ xrdp_packages:
 # Keep in sync with XRDP_PKGS in build-iso.sh.
 
 # ── Docker ────────────────────────────────────────────────────────────────────
-# Docker CE is installed by bootstrap.sh before Ansible runs.
-# This role only ensures the service is enabled and the admin user is in the group.
+# bootstrap.sh installs Docker first on an airgapped host, because ansible-runner
+# needs it, so the role's install task is a no-op there.
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-compose-plugin
+
 docker_service_state: started
 docker_service_enabled: true
 
 # ── Services ──────────────────────────────────────────────────────────────────
 install_cockpit: true
-# cockpit.socket + firewall port 9090 — cockpit-machines is already installed
-# by the kickstart, so this just enables the service.
+# cockpit package, cockpit.socket, and firewall port 9090.
 
 cockpit_enabled: "{{ install_cockpit }}"
 httpd_enabled: "{{ install_services }}"

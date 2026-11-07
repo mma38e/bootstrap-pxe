@@ -38,6 +38,23 @@ bootloader --location=mbr
 
 # ── Packages ──────────────────────────────────────────────────────────────────
 %packages
+# Written by %pre for the profile chosen at the boot menu.
+%include /tmp/packages.ks
+%end
+
+# ── Pre-install: collect network settings ────────────────────────────────────
+%pre --interpreter=/usr/bin/bash --erroronfail
+exec < /dev/tty6 > /dev/tty6 2> /dev/tty6
+chvt 6
+
+clear
+
+# The boot menu entry sets the install profile. Checked here so a bad value stops
+# the install before any disk is touched.
+PROFILE=$(sed -n 's/.*bootstrap\.profile=\([^ ]*\).*/\1/p' /proc/cmdline)
+case "${PROFILE}" in
+    bare_metal)
+        cat > /tmp/packages.ks <<'PACKAGES'
 @^graphical-server-environment
 @virtualization-hypervisor
 @virtualization-tools
@@ -55,14 +72,26 @@ openscap-utils
 cockpit-machines
 openssh-server
 python3
-%end
+PACKAGES
+        ;;
+    docker_vm)
+        cat > /tmp/packages.ks <<'PACKAGES'
+@^minimal-environment
+dnf-plugins-core
+python3
+python3-libselinux
+qemu-guest-agent
+open-vm-tools
+PACKAGES
+        ;;
+    *)
+        echo "Unknown or missing bootstrap.profile=${PROFILE}. Stopping before any disk change."
+        sleep 30
+        exit 1
+        ;;
+esac
+echo "${PROFILE}" > /tmp/bootstrap-profile
 
-# ── Pre-install: collect network settings ────────────────────────────────────
-%pre --interpreter=/usr/bin/bash
-exec < /dev/tty6 > /dev/tty6 2> /dev/tty6
-chvt 6
-
-clear
 echo "=========================================="
 echo "  Bootstrap Server — Network Configuration"
 echo "=========================================="
@@ -160,9 +189,18 @@ done
 
 chmod +x "${DEST}/bootstrap.sh" 2>/dev/null || true
 
-cat > /mnt/sysimage/etc/motd <<'MOTD'
+PROFILE=$(cat /tmp/bootstrap-profile)
+if [[ "${PROFILE}" == "docker_vm" ]]; then
+    MOTD_TITLE="Docker Host"
+    MOTD_ROLE="a Docker host."
+else
+    MOTD_TITLE="Bootstrap + PXE Server"
+    MOTD_ROLE="a bootstrap server and PXE boot server."
+fi
+
+cat > /mnt/sysimage/etc/motd <<MOTD
 ===========================================================
-  Rocky Linux 9.8 — Bootstrap + PXE Server
+  Rocky Linux 9.8 — ${MOTD_TITLE}
 ===========================================================
   Run the following to complete setup:
 
@@ -170,7 +208,7 @@ cat > /mnt/sysimage/etc/motd <<'MOTD'
 
   This will install Docker CE, load container images,
   and run the Ansible playbooks that configure this
-  machine as a bootstrap server and PXE boot server.
+  machine as ${MOTD_ROLE}
 ===========================================================
 MOTD
 
@@ -181,6 +219,7 @@ cat > /mnt/sysimage/etc/bootstrap-pxe-release <<RELEASE
 NAME="bootstrap-pxe"
 VERSION="__BASELINE_VERSION__"
 BUILD_DATE="__BASELINE_BUILD_DATE__"
+PROFILE="${PROFILE}"
 INSTALLED="$(date -u +%FT%TZ)"
 RELEASE
 chmod 0644 /mnt/sysimage/etc/bootstrap-pxe-release

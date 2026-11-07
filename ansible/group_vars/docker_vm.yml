@@ -1,0 +1,19 @@
+---
+# docker_vm profile — a low-overhead Docker host in a VM.
+#
+# The role defaults describe the bare_metal profile, so this file only turns off
+# what a Docker VM does not use. bootstrap.sh puts the host in this group from
+# the profile chosen at the ISO boot menu.
+
+install_desktop: false
+install_hypervisor: false
+install_pxe_server: false
+install_classification_banner: false
+install_smartcard: false
+install_dod_certs: false
+install_google_chrome: false
+install_vscode: false
+install_xrdp: false
+install_cockpit: false
+
+install_guest_agents: true

@@ -26,10 +26,26 @@
   import_tasks: services.yml
   tags: [services]
 
+# Before the banner and xrdp, which both need GNOME on the host.
+- name: Configure the desktop
+  import_tasks: desktop.yml
+  tags: [desktop]
+  when: install_desktop | bool
+
+- name: Configure the hypervisor
+  import_tasks: hypervisor.yml
+  tags: [hypervisor]
+  when: install_hypervisor | bool
+
+- name: Install guest agents
+  import_tasks: guest_agents.yml
+  tags: [guest_agents]
+  when: install_guest_agents | bool
+
 - name: Configure classification banner
   import_tasks: classification_banner.yml
   tags: [banner]
-  when: install_classification_banner
+  when: install_classification_banner | bool
 
 - name: Configure smart cards
   import_tasks: smartcard.yml

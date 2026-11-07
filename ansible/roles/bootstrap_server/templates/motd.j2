@@ -8,7 +8,9 @@ UPTIME=$(uptime -p 2>/dev/null || echo "unknown")
 KERNEL=$(uname -r)
 OS=$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME}" || echo "unknown")
 DOCKER=$(systemctl is-active docker 2>/dev/null || echo "inactive")
+{% if cockpit_enabled | bool %}
 COCKPIT=$(systemctl is-active cockpit.socket 2>/dev/null || echo "inactive")
+{% endif %}
 
 # /etc/bootstrap-pxe-release is written by bootstrap.ks at install time and
 # identifies which baseline release this host was provisioned from.
@@ -19,7 +21,7 @@ else
 fi
 
 echo "==========================================================="
-echo "  Bootstrap Server — $(hostname -s)"
+echo "  {{ 'Bootstrap Server' if (install_desktop | bool) else 'Docker Host' }} — $(hostname -s)"
 echo "==========================================================="
 printf "  IP:       %s\n" "${IP:-unknown}"
 printf "  OS:       %s\n" "${OS}"
@@ -28,9 +30,11 @@ printf "  Baseline: %s\n" "${BASELINE}"
 printf "  Uptime:   %s\n" "${UPTIME}"
 echo ""
 printf "  Docker:   %s\n" "${DOCKER}"
+{% if cockpit_enabled | bool %}
 printf "  Cockpit:  %s\n" "${COCKPIT}"
+{% endif %}
 echo ""
-echo "  Role:     Ansible Controller / Bootstrap Node"
+echo "  Role:     {{ 'Ansible Controller / Bootstrap Node' if (install_desktop | bool) else 'Docker Host' }}"
 echo "==========================================================="
 echo "  Useful commands:"
 echo "    docker ps              — list running containers"
@@ -50,10 +54,6 @@ echo ""
 {% if install_xrdp | bool %}
 echo "  Remote desktop (RDP):"
 echo "    ${IP:-this-host}:3389"
-echo ""
-{% else %}
-echo "  Switch to graphical target (optional, requires reboot):"
-echo "    systemctl set-default graphical.target && reboot"
 echo ""
 {% endif %}
 echo "==========================================================="

@@ -17,8 +17,7 @@
     owner: "{{ bootstrap_admin_user }}"
     group: "{{ bootstrap_admin_user }}"
     mode: "0750"
-  loop:
-    - .ssh
+  loop:   # .ssh is in users.yml, which sets the 0700 it needs
     - bin
     - projects
   when: bootstrap_admin_user is defined and bootstrap_admin_user != 'root'

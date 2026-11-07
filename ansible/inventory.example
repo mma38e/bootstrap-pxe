@@ -5,3 +5,7 @@
 
 [bootstrap_servers]
 local-bootstrap ansible_host=192.168.1.10
+
+# Install profile: bare_metal or docker_vm
+[bare_metal]
+local-bootstrap

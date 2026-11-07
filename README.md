@@ -1,11 +1,34 @@
 # bootstrap-pxe
 
-A self-contained provisioning kit for a Rocky Linux 9.8 bootstrap + PXE server.
+A self-contained provisioning kit for Rocky Linux 9.8. One ISO installs either of
+two profiles, chosen at its boot menu, with no internet access needed.
 
-This is the **first machine** in an airgapped environment. It installs Rocky Linux,
-configures itself as an infrastructure controller with Docker and Ansible, then runs
-a containerized PXE server to network-boot all other machines. Everything from OS
-install through PXE service deployment is handled by a single ISO.
+## Install Profiles
+
+| | `bare_metal` | `docker_vm` |
+|---|---|---|
+| **Use it for** | The first machine in an airgapped environment | A low-overhead Docker host in a VM |
+| **Boots to** | `graphical.target` | `multi-user.target` |
+| **Docker and CLI tools** | Yes | Yes |
+| **GNOME desktop, RDP** | Yes | No |
+| **KVM hypervisor, Cockpit** | Yes | No |
+| **PXE server** | Yes | No |
+| **Chrome, VS Code** | Yes | No |
+| **Smart cards, DoD certificates, classification banner** | Yes | No |
+| **Guest agents** | No | Yes (`qemu-guest-agent`, `open-vm-tools`) |
+
+Both profiles install the same command-line tools: `baseline_packages` in
+`bootstrap_server/defaults/main.yml`, including socat, screen, tmux, htop, nmap,
+tcpdump, and jq.
+
+The boot menu choice sets the OS packages and is stamped into
+`/etc/bootstrap-pxe-release`. `bootstrap.sh` reads it and puts the host in the
+matching Ansible inventory group. The role defaults describe `bare_metal`, and
+`ansible/group_vars/docker_vm.yml` turns off what a Docker VM does not use.
+
+On `bare_metal`, the host installs Rocky Linux, configures itself as an
+infrastructure controller with Docker and Ansible, then runs a containerized PXE
+server to network-boot other machines.
 
 ---
 
@@ -105,14 +128,24 @@ Output: `bootstrap-pxe-<YYYYMMDD>.iso`
 
 ### Step 2 — Boot the target machine
 
-Write the ISO to USB or mount as a virtual disk and boot. The boot menu offers
-two install entries that point at the same kickstart:
+Write the ISO to USB, or attach it as virtual media (a VM's CD-ROM, or a server's
+iDRAC or iLO), and boot. Both firmware types are supported. The boot menu offers one
+entry per install profile:
 
-- **Bootstrap Install (CD-ROM)** — default. Use when booting from physical
-  optical media or a virtual ISO mount.
-- **Bootstrap Install (USB)** — use when booting from a USB stick written by
-  Rufus or `dd`. The install source is read from the USB partition by volume
-  label (`BSTRAP_PXE`) instead of from a CD-ROM device.
+- **Bootstrap Server (bare metal)**: default. The `bare_metal` profile.
+- **Docker VM**: the `docker_vm` profile.
+
+Both find the install media by its volume label (`BSTRAP_PXE`), so the same entries
+work on CD, virtual media, and USB. The ISO is about 17 GB, so a USB stick must be at
+least that size.
+
+> **The install erases every disk the installer can see.** It protects the USB stick
+> it booted from, but not other disks in the machine.
+
+The installer reboots when it finishes. Leave the ISO attached, because it is the
+package source. On a BIOS machine that boots the stick first, choose the hard disk in
+the firmware boot menu. If you land back in this boot menu instead, nothing is erased
+until you answer the network prompts.
 
 > **Rufus tip:** when prompted, select **DD Image mode** (not ISO mode). DD
 > mode preserves the volume label and hybrid ISO layout the boot menu relies
@@ -128,12 +161,13 @@ cd /root/bootstrap
 ./bootstrap.sh
 ```
 
-This installs Docker, loads all container images, and runs both Ansible roles.
-On completion it prints next steps:
+Keep the ISO attached: it is the package source, and `bootstrap.sh` stops if it
+cannot find it. This installs Docker, loads the container images, and runs Ansible
+for the profile chosen at the boot menu. On completion it prints next steps:
 
 1. **Change the admin password** (default is `password`): `passwd cloud`
-2. **Open Cockpit**: `https://<IP>:9090`
-3. **Switch to GUI** (optional): `systemctl set-default graphical.target && reboot`
+2. On `bare_metal`, **open Cockpit**: `https://<IP>:9090`
+3. On `bare_metal`, **connect over RDP**: `<IP>:3389`
 
 Log out and back in to see the dynamic login banner with current system state.
 The MOTD shows the **baseline release** the host was provisioned from. The
@@ -145,6 +179,7 @@ cat /etc/bootstrap-pxe-release
 # NAME="bootstrap-pxe"
 # VERSION="1.3.0"
 # BUILD_DATE="2026-04-28"
+# PROFILE="bare_metal"
 # INSTALLED="2026-04-28T14:32:11Z"
 ```
 
@@ -154,12 +189,21 @@ cat /etc/bootstrap-pxe-release
 
 ### Bootstrap server variables
 
-Override in `ansible/group_vars/all.yml` or via `-e` flags:
+Override in `ansible/group_vars/all.yml`, or `ansible/group_vars/docker_vm.yml` for
+that profile only, or via `-e` flags:
 
 | Variable | Default | What it installs / does |
 |---|---|---|
 | `bootstrap_admin_user` | `cloud` | Admin username created by Ansible |
 | `bootstrap_admin_password` | `password` | Default password — **change in group_vars or vault** |
+| `install_desktop` | `true` | GNOME, GDM, and the graphical boot target. `install_xrdp` needs this |
+| `desktop_packages` | GNOME packages | Packages installed by `install_desktop`, including `brasero` |
+| `install_hypervisor` | `true` | KVM, libvirt, and the management tools |
+| `hypervisor_packages` | QEMU and libvirt packages | Packages installed by `install_hypervisor` |
+| `hypervisor_services` | `virtqemud`, `virtnetworkd`, `virtstoraged` sockets | libvirt daemons to enable. Rocky 9 uses these rather than `libvirtd` |
+| `install_guest_agents` | `false` | Agents that let a hypervisor manage this host. `true` on `docker_vm` |
+| `guest_agent_packages` | `qemu-guest-agent`, `open-vm-tools` | Installed but not started: each runs only on its own hypervisor |
+| `docker_packages` | `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-compose-plugin` | Packages installed from the Docker repo when `airgap_mode` is `false` |
 | `install_baseline` | `true` | Full baseline tool set — see `baseline_packages` in `bootstrap_server/defaults/main.yml`. Includes base utilities, dev/build, network, monitoring, serial, and filesystem tools (NTFS / exFAT / FAT32 / ext4 / XFS). |
 | `install_cockpit` | `true` | Enable cockpit.socket + firewall port 9090 |
 | `install_classification_banner` | `false` | Install + lock the GNOME classification banner extension. See `class_level` and `classification_banners` in `bootstrap_server/defaults/main.yml`. Banner appears at next GNOME login (existing sessions need logout/login). |
@@ -184,6 +228,7 @@ Override in `ansible/group_vars/all.yml` or via `-e` flags:
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `install_pxe_server` | `true` | Run the `pxe_server` role. `false` on `docker_vm` |
 | `airgap_mode` | `true` | Skip ISO downloads, use pre-staged files |
 | `dhcp_interface` | `eth0` | Network interface for dnsmasq |
 | `dhcp_enabled` | `false` | false=proxyDHCP, true=standalone DHCP |
@@ -214,14 +259,15 @@ Once Docker is installed, re-run just the playbook:
 cd /root/bootstrap
 docker run --rm -i \
     --network host \
-    -v "$(pwd)/ansible:/runner" \
+    -v "$(pwd):/runner" \
     -v /root/.ssh:/root/.ssh:ro \
-    -w /runner \
+    -w /runner/ansible \
     mma38e/ansible-runner:latest \
     ansible-playbook -i inventory.ini site.yml
 ```
 
-Use `--tags packages`, `--tags pxe`, etc. to target specific stages.
+`bootstrap.sh` already put the host in its profile's group, so no extra flags are
+needed. Use `--tags packages`, `--tags compose`, etc. to target specific stages.
 
 ---
 
@@ -244,6 +290,7 @@ bootstrap-pxe/
 │   ├── site.yml              Main playbook (both roles)
 │   ├── inventory.ini
 │   ├── group_vars/all.yml    Site-specific overrides
+│   ├── group_vars/docker_vm.yml  docker_vm profile: what it turns off
 │   └── roles/
 │       ├── bootstrap_server/ Host setup: packages, Docker, users, dirs
 │       └── pxe_server/       PXE setup: boot files, configs, containers

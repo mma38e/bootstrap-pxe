@@ -75,7 +75,7 @@ die()  { echo "[build-iso] ERROR: $*" >&2; exit 1; }
 
 step "Checking required tools"
 
-REQUIRED_TOOLS=(xorriso implantisomd5 curl openssl python3 docker rsync createrepo_c rpm unzip)
+REQUIRED_TOOLS=(xorriso implantisomd5 curl openssl python3 docker rsync createrepo_c rpm unzip mcopy)
 MISSING=()
 for tool in "${REQUIRED_TOOLS[@]}"; do
     if ! command -v "${tool}" &>/dev/null; then
@@ -85,7 +85,7 @@ done
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
     die "Missing required tools: ${MISSING[*]}
-  Install with: dnf install xorriso isomd5sum curl python3 rsync createrepo_c
+  Install with: dnf install xorriso isomd5sum curl python3 rsync createrepo_c mtools
   Docker must be installed separately."
 fi
 
@@ -506,20 +506,20 @@ step "Updating boot menus"
 ISOLINUX_CFG="${ISO_WORK}/isolinux/isolinux.cfg"
 if [[ -f "${ISOLINUX_CFG}" ]]; then
     log "Patching isolinux/isolinux.cfg..."
-    # Prepend our two entries (CD-ROM default + USB) and set default timeout.
-    # The same kickstart serves both — only inst.repo= and inst.ks= differ.
+    # Prepend one entry per install profile and set the default timeout. Each
+    # finds the media by label, which works on CD, virtual media, and USB alike.
     ISOLINUX_ENTRY=$(cat <<ISOL
 
-label bootstrap-cd
-  menu label ^Bootstrap Install (CD-ROM)
+label bare-metal
+  menu label ^Bootstrap Server (bare metal)
   menu default
   kernel vmlinuz
-  append initrd=initrd.img inst.stage2=hd:LABEL=${ISO_LABEL} inst.repo=cdrom inst.ks=cdrom:/bootstrap.ks quiet
+  append initrd=initrd.img inst.stage2=hd:LABEL=${ISO_LABEL} inst.repo=hd:LABEL=${ISO_LABEL} inst.ks=hd:LABEL=${ISO_LABEL}:/bootstrap.ks bootstrap.profile=bare_metal quiet
 
-label bootstrap-usb
-  menu label Bootstrap Install (^USB)
+label docker-vm
+  menu label ^Docker VM
   kernel vmlinuz
-  append initrd=initrd.img inst.stage2=hd:LABEL=${ISO_LABEL} inst.repo=hd:LABEL=${ISO_LABEL} inst.ks=hd:LABEL=${ISO_LABEL}:/bootstrap.ks quiet
+  append initrd=initrd.img inst.stage2=hd:LABEL=${ISO_LABEL} inst.repo=hd:LABEL=${ISO_LABEL} inst.ks=hd:LABEL=${ISO_LABEL}:/bootstrap.ks bootstrap.profile=docker_vm quiet
 
 ISOL
 )
@@ -571,13 +571,13 @@ if [[ -f "${GRUB_CFG}" ]]; then
     log "Patching EFI/BOOT/grub.cfg..."
     GRUB_ENTRY=$(cat <<GRUB
 
-menuentry 'Bootstrap Install (CD-ROM)' --class fedora --class gnu-linux --class gnu --class os {
-    linuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=${ISO_LABEL} inst.repo=cdrom inst.ks=cdrom:/bootstrap.ks quiet
+menuentry 'Bootstrap Server (bare metal)' --class fedora --class gnu-linux --class gnu --class os {
+    linuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=${ISO_LABEL} inst.repo=hd:LABEL=${ISO_LABEL} inst.ks=hd:LABEL=${ISO_LABEL}:/bootstrap.ks bootstrap.profile=bare_metal quiet
     initrdefi /images/pxeboot/initrd.img
 }
 
-menuentry 'Bootstrap Install (USB)' --class fedora --class gnu-linux --class gnu --class os {
-    linuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=${ISO_LABEL} inst.repo=hd:LABEL=${ISO_LABEL} inst.ks=hd:LABEL=${ISO_LABEL}:/bootstrap.ks quiet
+menuentry 'Docker VM' --class fedora --class gnu-linux --class gnu --class os {
+    linuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=${ISO_LABEL} inst.repo=hd:LABEL=${ISO_LABEL} inst.ks=hd:LABEL=${ISO_LABEL}:/bootstrap.ks bootstrap.profile=docker_vm quiet
     initrdefi /images/pxeboot/initrd.img
 }
 
@@ -596,9 +596,10 @@ content = cfg_path.read_text()
 content = re.sub(r'set default="\d+"', 'set default="0"', content)
 content = re.sub(r'set timeout=\d+', 'set timeout=10', content)
 
-# Repoint the stock entries' stage2 at the relabeled volume so media
-# check/rescue still work (the original DVD label no longer exists).
+# Repoint the stock entries' stage2 and the root search at the relabeled volume
+# so media check/rescue still work (the original DVD label no longer exists).
 content = re.sub(r'hd:LABEL=\S+', f'hd:LABEL={iso_label}', content)
+content = re.sub(r"(search\s.*-l\s+)'[^']*'", rf"\1'{iso_label}'", content)
 
 # Prepend entry before the first menuentry block, ensuring a blank line separator
 entry = new_entry.rstrip('\n') + '\n\n'
@@ -606,6 +607,10 @@ content = re.sub(r'(menuentry\s)', entry + r'\1', content, count=1)
 
 cfg_path.write_text(content)
 PYEOF
+
+    # A USB boot reads grub.cfg from inside efiboot.img, not from the ISO tree.
+    log "Updating grub.cfg inside images/efiboot.img..."
+    mcopy -o -i "${ISO_WORK}/images/efiboot.img" "${GRUB_CFG}" ::/EFI/BOOT/grub.cfg
 fi
 
 log "Boot menus updated"
@@ -619,11 +624,21 @@ step "Repackaging ISO"
 # it on USB write, breaking the boot menu's hd:LABEL=... lookups.
 log "Volume label: ${ISO_LABEL}"
 
+# The boot area options match what the stock Rocky ISO was built with (see
+# xorriso -report_el_torito as_mkisofs). -isohybrid-mbr takes the first 16 sectors
+# from the stock ISO: without them the ISO cannot boot from a USB stick.
+EFIBOOT_SECTORS=$(( $(stat -c %s "${ISO_WORK}/images/efiboot.img") / 512 ))
+
 log "Building new ISO..."
 xorriso -as mkisofs \
     -o "${OUTPUT_ISO}" \
     -V "${ISO_LABEL}" \
     -J -joliet-long -r \
+    -isohybrid-mbr "--interval:local_fs:0s-15s:zero_mbrpt,zero_gpt:${ROCKY_ISO}" \
+    -partition_cyl_align off \
+    -partition_offset 0 \
+    --mbr-force-bootable \
+    -iso_mbr_part_type 0x00 \
     -b isolinux/isolinux.bin \
     -c isolinux/boot.cat \
     -boot-load-size 4 \
@@ -632,6 +647,7 @@ xorriso -as mkisofs \
     -eltorito-alt-boot \
     -e images/efiboot.img \
     -no-emul-boot \
+    -boot-load-size "${EFIBOOT_SECTORS}" \
     -isohybrid-gpt-basdat \
     "${ISO_WORK}/" \
     2>&1 | grep -v "^xorriso" | grep -v "^$" || true
@@ -681,7 +697,7 @@ fi
 echo ""
 echo "  ── First-boot steps ───────────────────"
 echo "  1. Boot the target machine from the ISO"
-echo "  2. Kickstart runs automatically — no interaction needed"
+echo "  2. Pick a profile at the boot menu, then answer the network prompts"
 echo "  3. After reboot:"
 echo "       cd /root/bootstrap && ./bootstrap.sh"
 echo "=========================================="

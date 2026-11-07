@@ -40,6 +40,12 @@
     enabled: true
     state: started
 
+- name: Install cockpit
+  ansible.builtin.dnf:
+    name: cockpit
+    state: present
+  when: cockpit_enabled | bool
+
 - name: Enable cockpit socket
   ansible.builtin.systemd:
     name: cockpit.socket

@@ -1,4 +1,7 @@
 ---
+install_pxe_server: true
+# Run this role. Off in group_vars/docker_vm.yml. Read by ansible/site.yml.
+
 # ── Network ───────────────────────────────────────────────────────────────────
 # IP of this server on the imaging/PXE network
 pxe_server_ip: "192.168.1.10"

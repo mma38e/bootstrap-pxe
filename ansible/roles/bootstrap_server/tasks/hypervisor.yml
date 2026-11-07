@@ -1,0 +1,18 @@
+---
+# hypervisor.yml — KVM host: QEMU, libvirt, and the management tools
+#
+# Rocky 9 runs libvirt as modular daemons, so these are socket units rather than
+# libvirtd. The kickstart installs the packages on a bare_metal host; they are
+# declared here so the role converges a host on its own (AGENTS.md rule #11).
+
+- name: Install hypervisor packages
+  ansible.builtin.dnf:
+    name: "{{ hypervisor_packages }}"
+    state: present
+
+- name: Enable the libvirt daemons
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: "{{ hypervisor_services }}"
