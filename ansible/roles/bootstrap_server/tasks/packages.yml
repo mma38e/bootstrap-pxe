@@ -15,6 +15,29 @@
 # the online repos. No skip_broken here — an unavailable package means a
 # repo-setup problem and must fail loudly, not be skipped silently.
 
+# Signature checks on every package, including local RPM files (STIG CAT I).
+# bootstrap.sh sets this first on an airgapped host; declared here so the role
+# converges a host on its own (rule #11).
+- name: Require signatures on local package files
+  community.general.ini_file:
+    path: /etc/dnf/dnf.conf
+    section: main
+    option: localpkg_gpgcheck
+    value: "1"
+    no_extra_spaces: true
+    mode: "0644"
+
+- name: Trust the Rocky Linux signing key
+  ansible.builtin.rpm_key:
+    key: /etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-9
+    state: present
+
+- name: Trust the EPEL signing key
+  ansible.builtin.rpm_key:
+    key: "{{ bootstrap_airgap_files_dir }}/rpms/epel/RPM-GPG-KEY-EPEL-9"
+    state: present
+  when: airgap_mode | default(false) | bool
+
 - name: Install baseline packages (single transaction)
   ansible.builtin.dnf:
     name: "{{ baseline_packages }}"

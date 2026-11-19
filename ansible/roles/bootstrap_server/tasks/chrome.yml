@@ -6,8 +6,8 @@
 # run, so the defaults file has to exist before the package goes on. Its cron
 # job reads the same file.
 #
-# GPG check is off because dnf has no Google key here: build-iso.sh verifies
-# the airgap RPM's signature, and the online path downloads it over HTTPS.
+# Signature checks stay on (STIG CAT I). build-iso.sh also verifies the airgap
+# RPM against Google's key, and ships that key beside it.
 
 - name: Stop the Chrome RPM from adding its online repo
   ansible.builtin.copy:
@@ -19,6 +19,14 @@
     group: root
     mode: "0644"
 
+- name: Trust the Google signing key
+  ansible.builtin.rpm_key:
+    key: >-
+      {{ (bootstrap_airgap_files_dir ~ '/rpms/chrome/linux_signing_key.pub')
+         if (airgap_mode | default(false) | bool)
+         else 'https://dl.google.com/linux/linux_signing_key.pub' }}
+    state: present
+
 - name: Install Google Chrome
   ansible.builtin.dnf:
     name: >-
@@ -26,4 +34,3 @@
          if (airgap_mode | default(false) | bool)
          else google_chrome_rpm_url }}
     state: present
-    disable_gpg_check: true

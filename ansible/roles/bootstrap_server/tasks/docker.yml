@@ -12,11 +12,18 @@
   register: docker_rpms
   when: airgap_mode | default(false) | bool
 
+- name: Trust the Docker signing key
+  ansible.builtin.rpm_key:
+    key: >-
+      {{ (bootstrap_airgap_files_dir ~ '/rpms/docker/docker-ce.gpg')
+         if (airgap_mode | default(false) | bool)
+         else 'https://download.docker.com/linux/centos/gpg' }}
+    state: present
+
 - name: Install Docker CE from local RPMs
   ansible.builtin.dnf:
     name: "{{ docker_rpms.files | map(attribute='path') | list }}"
     state: present
-    disable_gpg_check: true
   when: airgap_mode | default(false) | bool
 
 - name: Add the Docker CE repo

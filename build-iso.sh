@@ -39,6 +39,8 @@ VSCODE_EXTENSIONS=(
 )
 CHROME_RPM_URL="https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm"
 CHROME_KEY_URL="https://dl.google.com/linux/linux_signing_key.pub"
+DOCKER_KEY_URL="https://download.docker.com/linux/centos/gpg"
+VSCODE_KEY_URL="https://packages.microsoft.com/keys/microsoft.asc"
 DOD_CERTS_URL="https://dl.dod.cyber.mil/wp-content/uploads/pki-pke/zip/unclass-certificates_pkcs7_DoD.zip"
 
 ANSIBLE_IMAGE="${ANSIBLE_RUNNER_IMAGE:-mma38e/ansible-runner:latest}"
@@ -70,6 +72,17 @@ PXE_ISO_DIR="${FILES_DIR}/isos"
 log()  { echo "[build-iso] $*"; }
 step() { echo ""; echo "[build-iso] ── $* ──────────────────────────────────────────"; }
 die()  { echo "[build-iso] ERROR: $*" >&2; exit 1; }
+
+# Fail the build unless every RPM in a directory is signed by an imported key.
+# The host installs them with signature checks on (a STIG CAT I requirement), so
+# an unsigned or tampered RPM must stop the build, not the install.
+verify_rpms() {
+    local rpm_file result
+    for rpm_file in "$1"/*.rpm; do
+        result=$(rpm -K "${rpm_file}" 2>&1) || die "Signature check failed: ${result}"
+        [[ "${result}" == *"signatures OK"* ]] || die "Not signed by a trusted key: ${result}"
+    done
+}
 
 # ── Preflight: tool check ─────────────────────────────────────────────────────
 
@@ -229,11 +242,22 @@ for PKG in "${DOCKER_PKGS[@]}"; do
         log "  Already downloaded: ${LATEST_RPM}"
     else
         log "  Downloading: ${LATEST_RPM}"
-        curl -L --progress-bar --retry 3 \
+        curl -L --fail --progress-bar --retry 3 \
             -o "${DEST}" \
             "${DOCKER_CE_REPO}/${LATEST_RPM}"
     fi
+
+    # Drop older versions left by earlier builds. The host installs every RPM in
+    # this directory in one transaction, which fails with two versions of a package.
+    find "${RPM_DIR}/docker" -maxdepth 1 -name "${PKG}-[0-9]*.rpm" ! -name "${LATEST_RPM}" -print -delete \
+        | sed 's#.*/#[build-iso]   Removed older: #'
 done
+
+log "Verifying Docker CE RPM signatures..."
+curl -L --fail --silent --show-error --retry 3 \
+    -o "${RPM_DIR}/docker/docker-ce.gpg" "${DOCKER_KEY_URL}"
+rpm --import "${RPM_DIR}/docker/docker-ce.gpg"
+verify_rpms "${RPM_DIR}/docker"
 
 log "Docker CE RPMs ready"
 
@@ -266,6 +290,14 @@ dnf download --resolve --destdir="${RPM_DIR}/epel" \
 log "Building local-epel repo metadata (createrepo_c)..."
 createrepo_c --quiet "${RPM_DIR}/epel"
 
+# The directory holds EPEL packages plus Rocky packages that --resolve pulled in,
+# so both keys are needed. The EPEL key comes from the builder's epel-release,
+# which dnf verified against the Rocky key when it installed it.
+log "Verifying EPEL package signatures..."
+cp /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-9 "${RPM_DIR}/epel/RPM-GPG-KEY-EPEL-9"
+rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-9 "${RPM_DIR}/epel/RPM-GPG-KEY-EPEL-9"
+verify_rpms "${RPM_DIR}/epel"
+
 log "EPEL packages ready: $(ls "${RPM_DIR}"/epel/*.rpm 2>/dev/null | wc -l) RPMs"
 
 # ── Download: VS Code RPM ────────────────────────────────────────────────────
@@ -279,6 +311,12 @@ VSCODE_DEST="${RPM_DIR}/vscode/code-latest.x86_64.rpm"
 # so a cached RPM can be too old for them.
 log "Downloading VS Code RPM..."
 curl -L --fail --progress-bar --retry 3 -o "${VSCODE_DEST}" "${VSCODE_RPM_URL}"
+
+log "Verifying VS Code RPM signature..."
+curl -L --fail --silent --show-error --retry 3 \
+    -o "${RPM_DIR}/vscode/microsoft.asc" "${VSCODE_KEY_URL}"
+rpm --import "${RPM_DIR}/vscode/microsoft.asc"
+verify_rpms "${RPM_DIR}/vscode"
 
 log "VS Code RPM ready: $(du -sh "${VSCODE_DEST}" | cut -f1)"
 
@@ -314,10 +352,9 @@ curl -L --fail --progress-bar --retry 3 -o "${CHROME_DEST}" "${CHROME_RPM_URL}"
 
 log "Verifying Google Chrome RPM signature..."
 curl -L --fail --silent --show-error --retry 3 \
-    -o "${WORK_DIR}/google-signing-key.pub" "${CHROME_KEY_URL}"
-rpm --import "${WORK_DIR}/google-signing-key.pub"
-CHROME_SIG="$(rpm -K "${CHROME_DEST}")" || die "Chrome RPM signature check failed: ${CHROME_SIG}"
-[[ "${CHROME_SIG}" == *"signatures OK"* ]] || die "Chrome RPM is not signed: ${CHROME_SIG}"
+    -o "${RPM_DIR}/chrome/linux_signing_key.pub" "${CHROME_KEY_URL}"
+rpm --import "${RPM_DIR}/chrome/linux_signing_key.pub"
+verify_rpms "${RPM_DIR}/chrome"
 
 log "Google Chrome RPM ready: $(du -sh "${CHROME_DEST}" | cut -f1)"
 

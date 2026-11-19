@@ -70,7 +70,7 @@ The resulting ISO is self-contained — no internet access is needed on the targ
 | Artifact | Source | Notes |
 |---|---|---|
 | Rocky 9.8 DVD ISO | `download.rockylinux.org` | For installing the host OS |
-| Docker CE RPMs | `download.docker.com` | docker-ce, cli, containerd, compose-plugin |
+| Docker CE RPMs | `download.docker.com` | docker-ce, cli, containerd, compose-plugin. Signatures verified against Docker's key at build time |
 | EPEL packages | `dl.fedoraproject.org` | htop, iotop, iperf3, minicom, screen, ntfs-3g, ntfsprogs, exfatprogs, dosfstools, fuse3, xrdp, xorgxrdp, xrdp-selinux, and a newer SELinux policy for it + deps — packaged as a local dnf repo (repodata via `createrepo_c`); installed by name on the target |
 | VS Code RPM + extensions | `update.code.visualstudio.com`, `marketplace.visualstudio.com` | Remote-SSH extension pack as VSIX files, pinned to stable versions. The RPM is always re-downloaded so it meets their minimum VS Code version |
 | Google Chrome RPM | `dl.google.com` | Signature verified against Google's key at build time |

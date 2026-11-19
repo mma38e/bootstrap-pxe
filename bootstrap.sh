@@ -100,7 +100,8 @@ if mountpoint -q "${ISO_MOUNT}" 2>/dev/null; then
 name=Rocky Linux 9 - BaseOS (Local)
 baseurl=file://${ISO_MOUNT}/BaseOS
 enabled=1
-gpgcheck=0
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-9
 EOF
 
     cat > /etc/yum.repos.d/local-appstream.repo <<EOF
@@ -108,7 +109,8 @@ EOF
 name=Rocky Linux 9 - AppStream (Local)
 baseurl=file://${ISO_MOUNT}/AppStream
 enabled=1
-gpgcheck=0
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-9
 EOF
 else
     die "Could not mount the install ISO (label ${ISO_LABEL}). Keep it attached: it is the package source for this host."
@@ -128,14 +130,22 @@ EPEL_PKGS=(htop iotop iperf3 minicom screen ntfs-3g ntfsprogs exfatprogs dosfsto
 [[ -d "${RPM_DIR}/epel/repodata" ]] || die \
     "No repodata in ${RPM_DIR}/epel/ — this ISO was built by a pre-1.4.0 build-iso.sh. Rebuild the ISO."
 
+# Signature checks stay on for every package (STIG CAT I). The EPEL directory
+# also holds Rocky packages, so it trusts both keys.
 log "Configuring local EPEL repo..."
+install -m 0644 "${RPM_DIR}/epel/RPM-GPG-KEY-EPEL-9" /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-9
 cat > /etc/yum.repos.d/local-epel.repo <<EOF
 [local-epel]
 name=EPEL packages (Local)
 baseurl=file://${RPM_DIR}/epel
 enabled=1
-gpgcheck=0
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-9 file:///etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-9
 EOF
+if ! grep -qx 'localpkg_gpgcheck=1' /etc/dnf/dnf.conf; then
+    sed -i '/^localpkg_gpgcheck=/d' /etc/dnf/dnf.conf
+    echo 'localpkg_gpgcheck=1' >> /etc/dnf/dnf.conf
+fi
 
 log "Installing EPEL packages from local-epel repo..."
 dnf install -y "${EPEL_PKGS[@]}"
@@ -146,6 +156,7 @@ else
     log "Installing Docker CE from local RPMs..."
     DOCKER_RPMS=("${RPM_DIR}"/docker/*.rpm)
     [[ -e "${DOCKER_RPMS[0]}" ]] || die "No Docker RPMs found in ${RPM_DIR}/docker/"
+    rpm --import "${RPM_DIR}/docker/docker-ce.gpg"
     dnf localinstall -y "${DOCKER_RPMS[@]}"
 
     log "Enabling and starting Docker..."

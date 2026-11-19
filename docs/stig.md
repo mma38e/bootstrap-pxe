@@ -23,12 +23,19 @@ Security Guide 0.1.80 from the Rocky 9.8 DVD.
 | `docker_vm` | `stig` | 46.1% | 164 | 272 | 40 | 15 | 235 | 19 |
 | `bare_metal` | `stig_gui` | 45.5% | 171 | 279 | 22 | 18 | 238 | 20 |
 
+After the signature-check fix (2026-11-19), before any STIG hardening:
+
+| Profile | Score | Pass | Fail | Signature rules |
+|---|---|---|---|---|
+| `docker_vm` | 46.6% | 167 | 269 | All 3 pass |
+| `bare_metal` | 45.9% | 174 | 276 | All 3 pass |
+
 CAT I failures, both profiles unless noted:
 
 | Rule | Expected after step 2 |
 |---|---|
 | `enable_fips_mode`, `enable_dracut_fips_module`, `sysctl_crypto_fips_enabled`, `configure_crypto_policy`, `harden_sshd_ciphers_openssh_conf_crypto_policy` | Fixed by FIPS mode |
-| `ensure_gpgcheck_local_packages`, `ensure_gpgcheck_never_disabled` | Our own design: the local repos and the Chrome and VS Code installs turn off signature checks. The packages are signed, so shipping their keys on the ISO should fix this |
+| `ensure_gpgcheck_local_packages`, `ensure_gpgcheck_never_disabled` | Fixed on `feature/stig`: every package is signature-checked. The build ships each vendor's key beside its RPMs and fails on any RPM that is not signed by it |
 | `grub2_password`, `grub2_admin_username` | Open until the GRUB password placeholder is set |
 | `no_empty_passwords`, `sshd_disable_empty_passwords` | Expected from the role |
 | `disable_ctrlaltdel_reboot`, `disable_ctrlaltdel_burstaction` | Expected from the role |
@@ -66,6 +73,26 @@ Found by review of step 1, against the 2.9.0 role source:
   libraries swept in by `dnf download --resolve`. Keep that repo out of the update.
 - **DNS:** the role's default writes `8.8.8.8` into NetworkManager. Keep 252035 off
   until a site value is set.
+
+## Signature checks
+
+Every package the host installs is signature-checked, which the CAT I rules
+`ensure_gpgcheck_local_packages` and `ensure_gpgcheck_never_disabled` require:
+
+| Source | Key on the ISO | Checked at build |
+|---|---|---|
+| DVD (BaseOS, AppStream) | Rocky key, already installed on every host | No: the DVD is Rocky's own |
+| `files/rpms/epel/` | `RPM-GPG-KEY-EPEL-9` from the builder's `epel-release`, plus the Rocky key for the Rocky packages there | Every RPM |
+| `files/rpms/docker/` | `docker-ce.gpg` | Every RPM |
+| `files/rpms/vscode/` | `microsoft.asc` | Every RPM |
+| `files/rpms/chrome/` | `linux_signing_key.pub` | Every RPM |
+
+`bootstrap.sh` turns `gpgcheck=1` on for the local repos and sets `localpkg_gpgcheck=1`
+in `dnf.conf`; the role declares the same and imports each key.
+
+Not covered: the PXE client kickstarts in `pxe_server` still set `gpgcheck=0`. They
+configure the machines this host installs, not the host, so they belong with the PXE
+work.
 
 ## Done in step 1
 

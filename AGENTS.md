@@ -137,7 +137,8 @@ bootstrap-pxe/
        ↓ prompts: root password, ansible-runner image tag, include PXE ISOs?
        ↓ downloads: Rocky 9.8 ISO, Docker CE RPMs, EPEL packages (x86_64/noarch
          + repodata built with createrepo_c), VS Code RPM + extensions, Chrome
-         RPM (signature verified), DoD certificates (signed manifest verified)
+         RPM, DoD certificates (signed manifest verified). Every RPM's signature
+         is verified, and each vendor's key is shipped beside its RPMs
        ↓ pulls + saves: ansible-runner image
        ↓ builds + saves: PXE container images (pxe-dhcp, pxe-tftp, pxe-http)
        ↓ optionally downloads: Ubuntu 22.04 + Rocky 9 ISOs for PXE clients
@@ -156,7 +157,8 @@ bootstrap-pxe/
 [Target machine — after reboot]
   3. cd /root/bootstrap && ./bootstrap.sh
        ↓ disables internet repos, mounts ISO as local repos (local-baseos,
-         local-appstream) and registers files/rpms/epel as local-epel
+         local-appstream) and registers files/rpms/epel as local-epel, all with
+         signature checks on, and sets localpkg_gpgcheck=1
        ↓ installs EPEL packages by name from local-epel
        ↓ installs Docker CE from local RPMs
        ↓ docker load ansible-runner.tar + pxe-images.tar (bare_metal only)
@@ -232,6 +234,12 @@ variables in `ansible/roles/pxe_server/defaults/main.yml`.
 ### Airgap artifacts
 The `files/` directory is gitignored. It is populated entirely by `build-iso.sh`.
 Never commit RPMs, images, or ISOs.
+
+### Package signatures
+Never turn off signature checks (`gpgcheck=0`, `disable_gpg_check`): it is a STIG
+CAT I finding. A new RPM source needs its vendor's key shipped beside its RPMs in
+`files/rpms/<source>/`, a `verify_rpms` call in `build-iso.sh`, and an `rpm_key` task
+in the role.
 
 ### ansible-runner
 All Ansible is run from the `mma38e/ansible-runner` Docker container (UBI9-based,
