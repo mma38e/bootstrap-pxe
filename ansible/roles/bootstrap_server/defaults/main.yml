@@ -9,6 +9,17 @@ bootstrap_admin_groups:
   - docker
   - wheel
 
+# ── Ansible service account ──────────────────────────────────────────────────
+bootstrap_ansible_user: "ansible"
+# The account ansible-runner logs in as. Key-only, with no password, and
+# passwordless sudo. bootstrap.sh creates it before the first run, because
+# Ansible needs it to log in. Keep in sync with ANSIBLE_ACCOUNT in bootstrap.sh.
+
+bootstrap_ansible_pubkey_file: "/root/.ssh/id_ecdsa.pub"
+# Public key authorized for that account. Read on the Ansible controller: inside
+# ansible-runner, /root/.ssh is the host's, mounted read-only. ECDSA rather than
+# ed25519, because the FIPS crypto policy the STIG enables rejects ed25519 keys.
+
 # ── Directories ───────────────────────────────────────────────────────────────
 bootstrap_project_dir: "/opt/bootstrap"
 bootstrap_data_dirs:
@@ -167,6 +178,18 @@ install_guest_agents: false
 guest_agent_packages:
   - qemu-guest-agent
   - open-vm-tools
+
+# ── STIG scanner ────────────────────────────────────────────────────────────
+install_stig_scanner: true
+# OpenSCAP and the SCAP Security Guide, plus /usr/local/sbin/stig-scan, which
+# scores the host against the DISA STIG. Both packages are on the DVD.
+
+stig_scanner_packages:
+  - openscap-scanner
+  - scap-security-guide
+
+stig_scan_dir: "/var/log/stig-scans"
+# Where stig-scan writes its HTML report, results, and summary.
 
 # ── Airgap artifacts ─────────────────────────────────────────────────────────
 bootstrap_airgap_files_dir: "/root/bootstrap/files"

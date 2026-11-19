@@ -47,6 +47,11 @@
   tags: [banner]
   when: install_classification_banner | bool
 
+- name: Install the STIG scanner
+  import_tasks: stig_scanner.yml
+  tags: [stig_scan]
+  when: install_stig_scanner | bool
+
 - name: Configure smart cards
   import_tasks: smartcard.yml
   tags: [smartcard]

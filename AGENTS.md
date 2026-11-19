@@ -54,6 +54,9 @@ bootstrap-pxe/
 │
 ├── docker-compose.yml    ← PXE container stack (dhcp, tftp, http)
 │
+├── docs/
+│   └── stig.md           ← STIG plan, baseline scores, open items
+│
 ├── containers/           ← PXE container Dockerfiles
 │   ├── dhcp/             ← alpine + dnsmasq (proxyDHCP or standalone)
 │   ├── tftp/             ← multi-stage: ubuntu (grub/syslinux) → alpine (tftpd)
@@ -86,11 +89,12 @@ bootstrap-pxe/
         │   │   ├── packages.yml        ← Tool installation
         │   │   ├── docker.yml          ← Docker install, service, group
         │   │   ├── directories.yml     ← /opt/bootstrap tree
-        │   │   ├── users.yml           ← Admin user, sudo
+        │   │   ├── users.yml           ← Admin user, sudo, Ansible service account
         │   │   ├── services.yml        ← httpd, tftp, sshd
         │   │   ├── desktop.yml         ← GNOME, GDM, graphical boot target
         │   │   ├── hypervisor.yml      ← KVM, libvirt, management tools
         │   │   ├── guest_agents.yml    ← qemu-guest-agent, open-vm-tools
+        │   │   ├── stig_scanner.yml    ← OpenSCAP, SCAP Security Guide, stig-scan
         │   │   ├── smartcard.yml       ← Reader drivers, OpenSC, pcscd
         │   │   ├── dod_certs.yml       ← DoD CAs into the system trust store
         │   │   ├── nssdb.yml           ← DoD CAs into Chrome's per-user NSS dbs
@@ -100,6 +104,7 @@ bootstrap-pxe/
         │   ├── files/configure-nssdb.sh ← Idempotent NSS CA import
         │   ├── files/xrdp-sesman.pam    ← GNOME login stack for RDP sessions
         │   ├── templates/motd.j2
+        │   ├── templates/stig-scan.sh.j2 ← /usr/local/sbin/stig-scan
         │   └── handlers/main.yml
         │
         └── pxe_server/                 ← Role 2: PXE service setup
@@ -155,6 +160,8 @@ bootstrap-pxe/
        ↓ installs EPEL packages by name from local-epel
        ↓ installs Docker CE from local RPMs
        ↓ docker load ansible-runner.tar + pxe-images.tar (bare_metal only)
+       ↓ generates an ECDSA keypair, creates the key-only ansible account with
+         passwordless sudo, and authorizes the key for it
        ↓ injects host IP + profile group into inventory, IP into group_vars
        ↓ docker run ansible-runner → ansible-playbook site.yml
 
@@ -219,6 +226,8 @@ variables in `ansible/roles/pxe_server/defaults/main.yml`.
 - Handler-based service restarts
 - **Never use `localhost` or `ansible_connection=local`** — ansible-runner runs
   inside a Docker container. Always target the host by IP address.
+- Ansible logs in as the `ansible` service account, never root: the STIG turns off
+  root SSH. Its key is ECDSA, because FIPS mode rejects ed25519.
 
 ### Airgap artifacts
 The `files/` directory is gitignored. It is populated entirely by `build-iso.sh`.

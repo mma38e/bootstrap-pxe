@@ -59,3 +59,38 @@
     create: true
     mode: "0440"
     validate: "visudo -cf %s"
+
+# ── Ansible service account ──────────────────────────────────────────────────
+# bootstrap.sh creates this account before the first run, because Ansible logs
+# in with it. Declared here too so the role converges a host on its own
+# (AGENTS.md rule #11). No password: it only ever logs in with the key.
+# Never expires: an account created after the STIG would otherwise inherit its
+# 60-day password age, and Ansible would be locked out when it ran out.
+- name: Create the Ansible service account
+  ansible.builtin.user:
+    name: "{{ bootstrap_ansible_user }}"
+    shell: /bin/bash
+    create_home: true
+    password_expire_max: -1
+    expires: -1
+    state: present
+
+- name: Authorize the Ansible controller key
+  ansible.posix.authorized_key:
+    user: "{{ bootstrap_ansible_user }}"
+    key: "{{ lookup('ansible.builtin.file', bootstrap_ansible_pubkey_file) }}"
+    state: present
+
+# Passwordless sudo is a documented STIG exception: it is what lets Ansible run
+# unattended. Only this account's line is managed, because the STIG adds its own
+# Defaults lines to every sudoers file.
+- name: Allow the Ansible service account sudo without a password
+  ansible.builtin.lineinfile:
+    path: "/etc/sudoers.d/{{ bootstrap_ansible_user }}"
+    regexp: '^{{ bootstrap_ansible_user }}\s'
+    line: "{{ bootstrap_ansible_user }} ALL=(ALL) NOPASSWD: ALL"
+    create: true
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"

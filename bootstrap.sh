@@ -70,6 +70,7 @@ dnf config-manager --set-disabled '*' 2>/dev/null || true
 # Mount the ISO if not already mounted
 ISO_MOUNT="/mnt/iso"
 ISO_LABEL="BSTRAP_PXE"  # Keep in sync with build-iso.sh
+ANSIBLE_ACCOUNT="ansible"  # Keep in sync with bootstrap_ansible_user and ansible_user
 if ! mountpoint -q "${ISO_MOUNT}" 2>/dev/null; then
     mkdir -p "${ISO_MOUNT}"
     # By label, because a VM can have other ISOs attached, such as guest tools.
@@ -212,18 +213,48 @@ fi
 
 # ── Step 6: Run Ansible playbook ─────────────────────────────────────────────
 
-# ansible-runner reaches the host over SSH using the mounted /root/.ssh.
-# Generate + authorize a root keypair so the play authenticates regardless of
-# the root password chosen at ISO build time (group_vars' ansible_ssh_pass
-# default only matches the shipped default password).
-if [[ ! -f /root/.ssh/id_ed25519 ]]; then
-    log "Generating root SSH keypair for ansible-runner..."
+# ansible-runner logs in over SSH as a key-only service account, with the key in
+# the mounted /root/.ssh. The keypair is generated here, once per host, and never
+# leaves it. The account is created here, not just by the role, because Ansible
+# needs it to log in at all. The STIG turns off root SSH, so root cannot be used.
+# ECDSA rather than ed25519: the FIPS crypto policy the STIG enables rejects
+# ed25519 keys, which would lock Ansible out.
+if [[ ! -f /root/.ssh/id_ecdsa ]]; then
+    log "Generating SSH keypair for ansible-runner..."
     mkdir -p /root/.ssh && chmod 700 /root/.ssh
-    ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/id_ed25519
+    ssh-keygen -q -t ecdsa -b 384 -N '' -f /root/.ssh/id_ecdsa
 fi
-if ! grep -qF "$(cat /root/.ssh/id_ed25519.pub)" /root/.ssh/authorized_keys 2>/dev/null; then
-    cat /root/.ssh/id_ed25519.pub >> /root/.ssh/authorized_keys
-    chmod 600 /root/.ssh/authorized_keys
+
+if ! id "${ANSIBLE_ACCOUNT}" &>/dev/null; then
+    log "Creating the ${ANSIBLE_ACCOUNT} service account..."
+    useradd -m -s /bin/bash "${ANSIBLE_ACCOUNT}"
+fi
+# Never expires, so a STIG password age cannot lock Ansible out. Output to
+# /dev/null: SELinux denies chage access to a log file this script is piped to.
+chage -M -1 -I -1 -E -1 "${ANSIBLE_ACCOUNT}" </dev/null >/dev/null 2>&1
+ANSIBLE_HOME=$(getent passwd "${ANSIBLE_ACCOUNT}" | cut -d: -f6)
+install -d -m 700 -o "${ANSIBLE_ACCOUNT}" -g "${ANSIBLE_ACCOUNT}" "${ANSIBLE_HOME}/.ssh"
+if ! grep -qsF "$(cat /root/.ssh/id_ecdsa.pub)" "${ANSIBLE_HOME}/.ssh/authorized_keys"; then
+    cat /root/.ssh/id_ecdsa.pub >> "${ANSIBLE_HOME}/.ssh/authorized_keys"
+fi
+chown "${ANSIBLE_ACCOUNT}:${ANSIBLE_ACCOUNT}" "${ANSIBLE_HOME}/.ssh/authorized_keys"
+chmod 600 "${ANSIBLE_HOME}/.ssh/authorized_keys"
+restorecon -R "${ANSIBLE_HOME}/.ssh"
+
+# Passwordless sudo for the service account. Checked on every run, so re-running
+# bootstrap.sh repairs it if something rewrote it. Only this account's line is
+# touched: the STIG adds its own Defaults lines to the file.
+SUDOERS_FILE="/etc/sudoers.d/${ANSIBLE_ACCOUNT}"
+SUDOERS_LINE="${ANSIBLE_ACCOUNT} ALL=(ALL) NOPASSWD: ALL"
+if ! grep -qsxF "${SUDOERS_LINE}" "${SUDOERS_FILE}"; then
+    # A name with a dot, so sudo ignores the file while it is being written.
+    SUDOERS_TMP=$(mktemp /etc/sudoers.d/.sudoers.XXXXXX)
+    { grep -vE "^${ANSIBLE_ACCOUNT}[[:space:]]" "${SUDOERS_FILE}" 2>/dev/null || true
+      echo "${SUDOERS_LINE}"; } > "${SUDOERS_TMP}"
+    chmod 440 "${SUDOERS_TMP}"
+    visudo -cf "${SUDOERS_TMP}" >/dev/null || { rm -f "${SUDOERS_TMP}"; die "Invalid sudoers entry for ${ANSIBLE_ACCOUNT}"; }
+    mv "${SUDOERS_TMP}" "${SUDOERS_FILE}"
+    restorecon "${SUDOERS_FILE}"
 fi
 
 log "Running Ansible playbook (bootstrap_server + pxe_server roles)..."

@@ -1,0 +1,26 @@
+---
+# stig_scanner.yml — Score the host against the DISA STIG with OpenSCAP
+#
+# Installs the scanner and the SCAP Security Guide content from the DVD, plus a
+# stig-scan command. Scanning is a separate, manual step: run stig-scan as root.
+
+- name: Install the STIG scanner packages
+  ansible.builtin.dnf:
+    name: "{{ stig_scanner_packages }}"
+    state: present
+
+- name: Create the scan report directory
+  ansible.builtin.file:
+    path: "{{ stig_scan_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install the stig-scan command
+  ansible.builtin.template:
+    src: stig-scan.sh.j2
+    dest: /usr/local/sbin/stig-scan
+    owner: root
+    group: root
+    mode: "0750"

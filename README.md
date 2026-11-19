@@ -195,6 +195,11 @@ that profile only, or via `-e` flags:
 | Variable | Default | What it installs / does |
 |---|---|---|
 | `bootstrap_admin_user` | `cloud` | Admin username created by Ansible |
+| `bootstrap_ansible_user` | `ansible` | Account ansible-runner logs in as: key-only, no password, never expires, passwordless sudo. Keep in sync with `ansible_user` in `group_vars/all.yml` and `ANSIBLE_ACCOUNT` in `bootstrap.sh` |
+| `bootstrap_ansible_pubkey_file` | `/root/.ssh/id_ecdsa.pub` | Public key authorized for that account, read on the Ansible controller. ECDSA because FIPS mode rejects ed25519 |
+| `install_stig_scanner` | `true` | Install OpenSCAP, the SCAP Security Guide, and the `stig-scan` command. See [STIG scanning](#stig-scanning) |
+| `stig_scanner_packages` | `openscap-scanner`, `scap-security-guide` | Packages installed by `install_stig_scanner` |
+| `stig_scan_dir` | `/var/log/stig-scans` | Where `stig-scan` writes its reports |
 | `bootstrap_admin_password` | `password` | Default password — **change in group_vars or vault** |
 | `install_desktop` | `true` | GNOME, GDM, and the graphical boot target. `install_xrdp` needs this |
 | `desktop_packages` | GNOME packages | Packages installed by `install_desktop`, including `brasero` |
@@ -234,6 +239,21 @@ that profile only, or via `-e` flags:
 | `dhcp_enabled` | `false` | false=proxyDHCP, true=standalone DHCP |
 | `ubuntu2204_enabled` | `true` | Enable Ubuntu PXE boot entries |
 | `rocky9_enabled` | `true` | Enable Rocky PXE boot entries |
+
+### Ansible login
+
+`bootstrap.sh` generates an ECDSA keypair on each host the first time it runs. The
+private key stays in `/root/.ssh/id_ecdsa`, readable only by root, and is never in
+the ISO or the repo. The public key is authorized for the `ansible` account, which
+has no password and passwordless sudo. ansible-runner mounts `/root/.ssh`
+read-only and logs in as `ansible`, so Ansible never needs root SSH.
+
+### STIG scanning
+
+Run `stig-scan` as root to score the host against the DISA STIG with OpenSCAP. It
+uses the `stig_gui` profile on a host with GNOME, otherwise `stig`, and writes an
+HTML report, results, and a summary to `/var/log/stig-scans/`. It changes nothing
+on the host. See `docs/stig.md` for baseline scores and the hardening plan.
 
 ### Remote desktop
 

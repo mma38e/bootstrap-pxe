@@ -1,0 +1,50 @@
+#!/bin/bash
+# stig-scan — Score this host against the DISA STIG with OpenSCAP.
+# Managed by Ansible (bootstrap_server role). Do not edit manually.
+#
+# Uses the stig_gui profile on a host with GNOME, otherwise stig. Writes an HTML
+# report, ARF results, and a summary to {{ stig_scan_dir }}.
+set -euo pipefail
+
+DATASTREAM="/usr/share/xml/scap/ssg/content/ssg-rl9-ds.xml"
+OUT_DIR="{{ stig_scan_dir }}"
+
+[[ "$(id -u)" -eq 0 ]] || { echo "Run as root." >&2; exit 1; }
+[[ -f "${DATASTREAM}" ]] || { echo "Missing ${DATASTREAM}: is scap-security-guide installed?" >&2; exit 1; }
+
+if rpm -q gnome-shell &>/dev/null; then
+    PROFILE="stig_gui"
+else
+    PROFILE="stig"
+fi
+
+BASE="${OUT_DIR}/$(date +%Y%m%d-%H%M%S)-${PROFILE}"
+mkdir -p "${OUT_DIR}"
+
+echo "Scanning with profile ${PROFILE}. This takes a few minutes..."
+# oscap exits 2 when any rule fails, which is the normal outcome of a scan.
+RC=0
+oscap xccdf eval \
+    --profile "xccdf_org.ssgproject.content_profile_${PROFILE}" \
+    --results-arf "${BASE}-arf.xml" \
+    --report "${BASE}.html" \
+    "${DATASTREAM}" > "${BASE}.log" 2>&1 || RC=$?
+if [[ "${RC}" -ne 0 && "${RC}" -ne 2 ]]; then
+    echo "oscap failed with exit ${RC}. See ${BASE}.log" >&2
+    exit "${RC}"
+fi
+
+count() { grep -cE "^Result[[:space:]]+$1\$" "${BASE}.log" || true; }
+SCORE=$(grep -oE '<([a-z0-9]+:)?score system="urn:xccdf:scoring:default"[^>]*>[0-9.]+' "${BASE}-arf.xml" \
+    | head -1 | sed -E 's/.*>//')
+
+{
+    echo "Profile:        ${PROFILE}"
+    echo "Score:          ${SCORE:-unknown}"
+    echo "Pass:           $(count pass)"
+    echo "Fail:           $(count fail)"
+    echo "Not applicable: $(count notapplicable)"
+    echo "Not checked:    $(count notchecked)"
+    echo "Error:          $(count error)"
+    echo "Report:         ${BASE}.html"
+} | tee "${BASE}-summary.txt"
