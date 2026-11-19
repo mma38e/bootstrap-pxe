@@ -28,7 +28,9 @@ ANSIBLE_DIR="${SCRIPT_DIR}/ansible"
 IMAGE_TAR="${IMAGE_DIR}/ansible-runner.tar"
 PXE_IMAGE_TAR="${IMAGE_DIR}/pxe-images.tar"
 PXE_ISO_DIR="${SCRIPT_DIR}/files/isos"
-ANSIBLE_IMAGE="mma38e/ansible-runner:latest"
+# The image build-iso.sh saved. The fallback only matters for an ISO built before
+# the tag file existed.
+ANSIBLE_IMAGE=$(cat "${IMAGE_DIR}/ansible-runner.tag" 2>/dev/null || echo "mma38e/ansible-runner:0.2")
 INVENTORY="inventory.ini"
 PLAYBOOK="site.yml"
 
@@ -296,3 +298,11 @@ if [[ "${PROFILE}" == "bare_metal" ]]; then
     log "  PXE clients can now network boot from this server."
 fi
 log "  Log out and back in to see the post-setup quick reference."
+
+# FIPS mode, which the STIG enables, only takes effect after a reboot. The STIG
+# role is told never to reboot, because Ansible runs in a container on this host.
+if [[ "$(grubby --info DEFAULT 2>/dev/null)" == *fips=1* ]] && ! grep -qw 'fips=1' /proc/cmdline; then
+    log ""
+    log "REBOOT REQUIRED: the STIG enabled FIPS mode, which starts at the next boot."
+    log "  systemctl reboot"
+fi

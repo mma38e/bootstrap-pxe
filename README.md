@@ -75,7 +75,7 @@ The resulting ISO is self-contained — no internet access is needed on the targ
 | VS Code RPM + extensions | `update.code.visualstudio.com`, `marketplace.visualstudio.com` | Remote-SSH extension pack as VSIX files, pinned to stable versions. The RPM is always re-downloaded so it meets their minimum VS Code version |
 | Google Chrome RPM | `dl.google.com` | Signature verified against Google's key at build time |
 | DoD PKI certificates | `dl.dod.cyber.mil` | DISA's unclassified PKCS#7 bundle. Signed manifest verified at build time |
-| ansible-runner image | `docker save mma38e/ansible-runner:latest` | Ansible execution container |
+| ansible-runner image | `docker save mma38e/ansible-runner:0.2` | Ansible execution container, with the RHEL9-STIG role. The tag is recorded beside the tar, and `bootstrap.sh` runs that image |
 | PXE container images | Built by `docker compose build` | pxe-dhcp, pxe-tftp, pxe-http |
 | Ubuntu 22.04 ISO | `releases.ubuntu.com` | Optional — for PXE clients |
 | Rocky 9 DVD ISO | `download.rockylinux.org` | Optional — for PXE clients |
@@ -121,7 +121,7 @@ on every run.
 
 The script will prompt for:
 - Root password (hashed with SHA-512, embedded in kickstart)
-- ansible-runner image tag (default: `mma38e/ansible-runner:latest`)
+- ansible-runner image tag (default: `mma38e/ansible-runner:0.2`)
 - Whether to include PXE client ISOs (~12 GB extra)
 
 Output: `bootstrap-pxe-<YYYYMMDD>.iso`
@@ -197,6 +197,7 @@ that profile only, or via `-e` flags:
 | `bootstrap_admin_user` | `cloud` | Admin username created by Ansible |
 | `bootstrap_ansible_user` | `ansible` | Account ansible-runner logs in as: key-only, no password, never expires, passwordless sudo. Keep in sync with `ansible_user` in `group_vars/all.yml` and `ANSIBLE_ACCOUNT` in `bootstrap.sh` |
 | `bootstrap_ansible_pubkey_file` | `/root/.ssh/id_ecdsa.pub` | Public key authorized for that account, read on the Ansible controller. ECDSA because FIPS mode rejects ed25519 |
+| `install_stig` | `false` (role), `true` (`group_vars/all.yml`) | Apply the DISA STIG with `ansible/stig.yml`. Also removes the `wheel` group's passwordless sudo. See [STIG hardening](#stig-hardening) |
 | `install_stig_scanner` | `true` | Install OpenSCAP, the SCAP Security Guide, and the `stig-scan` command. See [STIG scanning](#stig-scanning) |
 | `stig_scanner_packages` | `openscap-scanner`, `scap-security-guide` | Packages installed by `install_stig_scanner` |
 | `stig_scan_dir` | `/var/log/stig-scans` | Where `stig-scan` writes its reports |
@@ -248,6 +249,21 @@ the ISO or the repo. The public key is authorized for the `ansible` account, whi
 has no password and passwordless sudo. ansible-runner mounts `/root/.ssh`
 read-only and logs in as `ansible`, so Ansible never needs root SSH.
 
+### STIG hardening
+
+With `install_stig` on, `site.yml` ends by importing `ansible/stig.yml`, which runs
+the ansible-lockdown RHEL9-STIG role (2.9.0, STIG V2R9) from the ansible-runner
+image. Its settings are in `ansible/group_vars/stig.yml`, and every rule it leaves
+off is listed in `docs/stig-exceptions.md` as an exception, an open finding with a
+POA&M, or a placeholder waiting on a site value.
+
+- **Reboot afterwards.** FIPS mode starts at the next boot, and `bootstrap.sh` says
+  so. The role never reboots the host itself, because Ansible runs in a container
+  on it.
+- **sudo needs a password** for the admin user. Only the `ansible` account keeps
+  passwordless sudo.
+- **Root cannot log in over SSH.** Use the admin user, or the console.
+
 ### STIG scanning
 
 Run `stig-scan` as root to score the host against the DISA STIG with OpenSCAP. It
@@ -282,7 +298,7 @@ docker run --rm -i \
     -v "$(pwd):/runner" \
     -v /root/.ssh:/root/.ssh:ro \
     -w /runner/ansible \
-    mma38e/ansible-runner:latest \
+    "$(cat files/images/ansible-runner.tag)" \
     ansible-playbook -i inventory.ini site.yml
 ```
 
@@ -307,10 +323,12 @@ bootstrap-pxe/
 │   ├── tftp/                 alpine + tftpd-hpa (multi-stage build)
 │   └── http/                 nginx:alpine
 ├── ansible/
-│   ├── site.yml              Main playbook (both roles)
+│   ├── site.yml              Main playbook (both roles, then stig.yml)
+│   ├── stig.yml              DISA STIG (ansible-lockdown RHEL9-STIG 2.9.0)
 │   ├── inventory.ini
 │   ├── group_vars/all.yml    Site-specific overrides
 │   ├── group_vars/docker_vm.yml  docker_vm profile: what it turns off
+│   ├── group_vars/stig.yml   STIG overrides, loaded by stig.yml (not a group)
 │   └── roles/
 │       ├── bootstrap_server/ Host setup: packages, Docker, users, dirs
 │       └── pxe_server/       PXE setup: boot files, configs, containers

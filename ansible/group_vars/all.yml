@@ -5,6 +5,12 @@
 # A key-only service account. bootstrap.sh creates it, with a key generated on
 # each host at install. Keep in sync with bootstrap_ansible_user.
 ansible_user: ansible
+
+# Send module code to python3 on stdin instead of copying a .py file to the host.
+# Required under the STIG: fapolicyd denies a non-root account opening an untrusted
+# Python file, so without this every run after the first fails. Works because
+# RHEL 9 sudoers has no requiretty, and the STIG role does not add it.
+ansible_pipelining: true
 ansible_ssh_extra_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -36,3 +42,8 @@ rocky9_extra_profiles:
 
 install_classification_banner: true
 class_level: "UNCLASSIFIED"
+
+# ── STIG ─────────────────────────────────────────────────────────────────────
+# Apply the DISA STIG with ansible/stig.yml, on both install profiles. Overrides
+# are in group_vars/stig.yml; exceptions in docs/stig-exceptions.md.
+install_stig: true

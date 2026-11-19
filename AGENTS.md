@@ -55,7 +55,8 @@ bootstrap-pxe/
 ├── docker-compose.yml    ← PXE container stack (dhcp, tftp, http)
 │
 ├── docs/
-│   └── stig.md           ← STIG plan, baseline scores, open items
+│   ├── stig.md           ← STIG plan, baseline scores, open items
+│   └── stig-exceptions.md ← Every STIG rule left off: exception, POA&M, or placeholder
 │
 ├── containers/           ← PXE container Dockerfiles
 │   ├── dhcp/             ← alpine + dnsmasq (proxyDHCP or standalone)
@@ -75,12 +76,14 @@ bootstrap-pxe/
 │   └── isos/             ← PXE client ISOs (Ubuntu, Rocky) — optional
 │
 └── ansible/              ← Full machine + PXE configuration via Ansible
-    ├── site.yml          ← Main playbook (runs both roles in sequence)
+    ├── site.yml          ← Main playbook (runs both roles, then imports stig.yml)
+    ├── stig.yml          ← Applies the DISA STIG role from the ansible-runner image
     ├── inventory.ini     ← Host entry with __BOOTSTRAP_IP__ placeholder
     ├── inventory.example ← Template for customisation
     ├── group_vars/
     │   ├── all.yml       ← SSH settings, bootstrap vars, PXE vars
-    │   └── docker_vm.yml ← docker_vm profile: turns off what it does not use
+    │   ├── docker_vm.yml ← docker_vm profile: turns off what it does not use
+    │   └── stig.yml      ← STIG role overrides, loaded by stig.yml (not a group)
     └── roles/
         ├── bootstrap_server/           ← Role 1: Host setup
         │   ├── defaults/main.yml       ← Tool toggles + defaults
@@ -174,6 +177,9 @@ bootstrap-pxe/
        ↓ pxe_server (bare_metal only): stage ISOs, extract kernels, render
          configs, compose up
 
+       ↓ stig.yml (install_stig): ansible-lockdown RHEL9-STIG 2.9.0 with the
+         overrides in group_vars/stig.yml, both profiles. FIPS needs a reboot
+
   5. bare_metal: PXE server running — clients can now network boot
      docker_vm: Docker host ready
 ```
@@ -243,7 +249,17 @@ in the role.
 
 ### ansible-runner
 All Ansible is run from the `mma38e/ansible-runner` Docker container (UBI9-based,
-Galaxy collections pre-installed). Invoked via `docker run` in `bootstrap.sh`.
+Galaxy collections and the ansible-lockdown STIG roles pre-installed), pinned to
+tag `0.2` (ansible-core 2.22). `build-iso.sh` records the tag it saved in
+`files/images/ansible-runner.tag`, and `bootstrap.sh` runs that exact image.
+
+### STIG
+`ansible/stig.yml` applies the ansible-lockdown RHEL9-STIG role. Its overrides live
+in `ansible/group_vars/stig.yml`, loaded through `vars_files`, so they outrank
+`group_vars/docker_vm.yml`: write profile differences there as expressions on the
+`install_*` toggles. Every rule turned off must have a row in
+`docs/stig-exceptions.md`. The role must never reboot the host (`skip_reboot`), because
+ansible-runner runs as a container on it.
 
 ---
 

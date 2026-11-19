@@ -16,3 +16,6 @@
     - bootstrap_server
     - role: pxe_server
       when: install_pxe_server | bool
+
+# DISA STIG hardening, when install_stig is true. See stig.yml.
+- import_playbook: stig.yml

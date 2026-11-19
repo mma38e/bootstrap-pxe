@@ -179,6 +179,12 @@ guest_agent_packages:
   - qemu-guest-agent
   - open-vm-tools
 
+# ── STIG ─────────────────────────────────────────────────────────────────────
+install_stig: false
+# Set to true in group_vars/all.yml, where ansible/stig.yml also reads it. Here it
+# only decides the wheel group's sudo: passwordless without the STIG, and with
+# a password under it, because RHEL-09-611085 forbids NOPASSWD.
+
 # ── STIG scanner ────────────────────────────────────────────────────────────
 install_stig_scanner: true
 # OpenSCAP and the SCAP Security Guide, plus /usr/local/sbin/stig-scan, which

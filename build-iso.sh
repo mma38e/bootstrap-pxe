@@ -43,7 +43,7 @@ DOCKER_KEY_URL="https://download.docker.com/linux/centos/gpg"
 VSCODE_KEY_URL="https://packages.microsoft.com/keys/microsoft.asc"
 DOD_CERTS_URL="https://dl.dod.cyber.mil/wp-content/uploads/pki-pke/zip/unclass-certificates_pkcs7_DoD.zip"
 
-ANSIBLE_IMAGE="${ANSIBLE_RUNNER_IMAGE:-mma38e/ansible-runner:latest}"
+ANSIBLE_IMAGE="${ANSIBLE_RUNNER_IMAGE:-mma38e/ansible-runner:0.2}"
 
 # PXE client ISO URLs — override with environment variables if needed
 UBUNTU_ISO_URL="${UBUNTU_ISO_URL:-https://releases.ubuntu.com/22.04/ubuntu-22.04.5-live-server-amd64.iso}"
@@ -396,15 +396,19 @@ step "ansible-runner container image"
 
 mkdir -p "${IMAGE_DIR}"
 IMAGE_TAR="${IMAGE_DIR}/ansible-runner.tar"
+# Records which image the tar holds. bootstrap.sh runs that exact image, and a
+# tar saved from a different tag is pulled again rather than shipped stale.
+IMAGE_TAG_FILE="${IMAGE_DIR}/ansible-runner.tag"
 
-if [[ -f "${IMAGE_TAR}" ]]; then
-    log "Image tarball already exists — skipping pull (delete ${IMAGE_TAR} to force re-pull)"
+if [[ -f "${IMAGE_TAR}" && "$(cat "${IMAGE_TAG_FILE}" 2>/dev/null)" == "${ANSIBLE_IMAGE}" ]]; then
+    log "Image tarball for ${ANSIBLE_IMAGE} already exists — skipping pull (delete ${IMAGE_TAR} to force re-pull)"
 else
     log "Pulling ${ANSIBLE_IMAGE}..."
     docker pull "${ANSIBLE_IMAGE}"
 
     log "Saving to ${IMAGE_TAR}..."
     docker save "${ANSIBLE_IMAGE}" > "${IMAGE_TAR}"
+    echo "${ANSIBLE_IMAGE}" > "${IMAGE_TAG_FILE}"
 
     IMAGE_SIZE=$(du -sh "${IMAGE_TAR}" | cut -f1)
     log "Image saved: ${IMAGE_SIZE}"

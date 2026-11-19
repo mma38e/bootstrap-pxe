@@ -171,7 +171,9 @@ set -euo pipefail
 
 chroot /mnt/sysimage systemctl enable sshd
 
-# Allow root SSH login (needed for ansible-runner to reach the host)
+# Allow root SSH login until the host is hardened, for first-boot access.
+# Ansible logs in as its own account, not root, and ansible/stig.yml removes
+# this file so the STIG's PermitRootLogin no takes effect.
 mkdir -p /mnt/sysimage/etc/ssh/sshd_config.d
 echo "PermitRootLogin yes" > /mnt/sysimage/etc/ssh/sshd_config.d/01-permitrootlogin.conf
 

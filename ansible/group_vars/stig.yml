@@ -1,0 +1,156 @@
+---
+# DISA STIG overrides for the ansible-lockdown RHEL9-STIG role, version 2.9.0
+# (STIG V2R9), which ships in the ansible-runner image.
+#
+# Loaded by ansible/stig.yml through vars_files, not as inventory group vars:
+# never create an inventory group named "stig". vars_files outrank
+# group_vars/docker_vm.yml, so anything that differs by install profile is an
+# expression on the profile toggles below. Their defaults match the
+# bootstrap_server role's, because that role's defaults are not loaded here.
+#
+# Every rule turned off here has a row in docs/stig-exceptions.md, which says
+# whether it is an approved exception, an open finding with a POA&M, or waiting
+# on a site value. Keep the two in step.
+
+# ── Scope ─────────────────────────────────────────────────────────────────────
+rhel9stig_cat1: true
+rhel9stig_cat2: true
+rhel9stig_cat3: true
+
+# Needed for FIPS mode (RHEL-09-671010), and also turns on the password,
+# faillock, SSH crypto, and file permission rules that the role gates on it.
+rhel9stig_disruption_high: true
+
+# Never let the role reboot the host: ansible-runner runs as a container on this
+# same host, so a reboot would kill the run. bootstrap.sh says when one is due.
+skip_reboot: true
+
+# The role's own audit downloads its tooling from the internet. stig-scan
+# measures instead, with OpenSCAP from the DVD.
+setup_audit: false
+run_audit: false
+
+# ── Ansible service account ──────────────────────────────────────────────────
+# RHEL-09-611085 turns every NOPASSWD sudo rule into PASSWD. The service account
+# has no password, so it must be excluded or Ansible loses sudo mid-run.
+# Overriding this list replaces the role's defaults (ec2-user, vagrant).
+rhel9stig_sudoers_exclude_nopasswd_list:
+  - "{{ ansible_user }}"
+
+# ── Exceptions: approved deviations ──────────────────────────────────────────
+# IP forwarding: Docker bridge networking and libvirt NAT need it.
+rhel_09_253075: false
+rhel_09_254025: false
+
+# USB mass storage and USBGuard: hosts are installed from, and keep using, a USB
+# stick as their package source.
+rhel_09_291010: false
+rhel_09_291015: false
+rhel_09_291020: false
+rhel_09_291025: false
+rhel_09_291030: false
+
+# CAC login is not enforced.
+rhel_09_611160: false
+rhel_09_611165: false
+rhel_09_611170: false
+
+# EPEL packages are used by design (xrdp, htop, screen, filesystem tools), from the
+# signature-checked local-epel repo. RHEL-09-215035 either removes epel-release or
+# disables a repo named "epel", which does not exist here, and fails the play.
+rhel_09_215035: false
+
+# User namespaces: RHEL-09-213105 sets user.max_user_namespaces to 0, which stops
+# systemd sandboxing services (irqbalance fails to start) and forces Chrome onto
+# its setuid sandbox, which SELinux denies. These are container hosts.
+rhel_09_213105: false
+
+# The GUI is approved on bare_metal. Without this, RHEL-09-211030 sets the text
+# boot target and RHEL-09-215070 removes the display manager.
+rhel9stig_gui_approved: "{{ install_desktop | default(true) | bool }}"
+
+# ── Open findings with a POA&M ───────────────────────────────────────────────
+# fapolicyd: with Rocky's stock rules it denies runc, which Docker runs from an
+# in-memory copy, so no container starts: not Docker workloads, not the PXE stack,
+# not ansible-runner itself. Installed (433010) but not enabled until a rule set
+# that works with runc is built. stig.yml stops it on hosts where it already runs.
+rhel_09_433015: false
+
+# Separate filesystems. /var, /var/log, and /var/log/audit are CAT III;
+# /home, /tmp, and /var/tmp are CAT II.
+rhel_09_231010: false
+rhel_09_231015: false
+rhel_09_231020: false
+rhel_09_231025: false
+rhel_09_231030: false
+rhel_09_231035: false
+
+# Audit storage actions. On a single root filesystem these stop the host or drop it
+# to single-user mode when the disk fills, cutting off SSH, RDP, and Ansible:
+# HALT on disk full (653025) and disk error (653020), and single-user mode at the
+# 5% admin space left threshold (653050).
+rhel_09_653020: false
+rhel_09_653025: false
+rhel_09_653050: false
+
+# GRUB boot loader password (RHEL-09-212020 is CAT I).
+rhel_09_212010: false
+rhel_09_212020: false
+
+# Patches: RHEL-09-211015 runs a full update from the local repos, which would
+# pull newer base libraries from local-epel than the DVD's. Hosts are patched by
+# rebuilding the ISO.
+rhel_09_211015: false
+
+# ── Role defects ─────────────────────────────────────────────────────────────
+# RHEL-09-232240 only audits here, never changes anything, and its find over every
+# filesystem fails the play when a directory vanishes mid-scan (a user session's
+# /run/user/<uid>). stig-scan still measures the rule.
+rhel_09_232240: false
+
+# The role writes this banner to /etc/issue and into GNOME's dconf database. Its
+# paragraph breaks are not valid in a dconf key file, so every dconf update fails.
+# Same DoD text, with its whitespace collapsed to single spaces.
+rhel9stig_logon_banner: "{{ rhel9stig_logon_banner_nice | regex_replace('\\s+', ' ') | trim }}"
+
+# ── Placeholders: rules off until a site value is set ────────────────────────
+# Each rule writes its value into the host, and the role's defaults point at
+# public servers that do not exist on this network.
+#
+# TODO DNS: set two or more internal name servers, then turn 252035 and 252040
+# back on. The role default writes 8.8.8.8 into NetworkManager.
+# rhel9stig_dns_ip4_servers:
+#   -
+rhel_09_252035: false
+rhel_09_252040: false
+#
+# TODO NTP: set internal time servers, then turn 252020 back on. The role
+# default writes the pool.ntp.mil servers into chrony.conf.
+# rhel9stig_time_synchronization_servers:
+#   -
+rhel_09_252020: false
+#
+# TODO Remote syslog: set a central log server, then turn 652055 back on. The role
+# forwards over TLS, so its rhel9stig_rsyslog_stream_driver* settings need the
+# server's certificates too.
+# rhel9stig_rsyslog_remote_server_ip:
+# rhel9stig_rsyslog_remote_server_port:
+# rhel9stig_rsyslog_remote_server_protocol:
+rhel_09_652055: false
+
+# ── Firewall (RHEL-09-251020) ────────────────────────────────────────────────
+# The role moves this interface to a DROP zone. It would pick the interface from
+# the default route, which an airgapped network may not have, so ansible/stig.yml
+# finds the one holding the host's own address.
+rhel9stig_custom_firewall:
+  zone: drop
+  interface: "{{ stig_primary_interface }}"
+
+# Services or port/protocol strings allowed through that zone. The role only accepts
+# a service name matching ^[a-z]+$ or a port matching ^[0-9]+/[a-z]+$, and silently
+# drops anything else, so a hyphenated service such as proxy-dhcp must be a port.
+rhel9stig_white_list_services: >-
+  {{ ['ssh']
+     + (['cockpit'] if (install_cockpit | default(true) | bool) else [])
+     + (['3389/tcp'] if (install_xrdp | default(true) | bool) else [])
+     + (['dhcp', '4011/udp', 'tftp', 'http'] if (install_pxe_server | default(true) | bool) else []) }}

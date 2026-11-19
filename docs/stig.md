@@ -3,6 +3,10 @@
 Work in progress on `feature/stig`. This records the plan, baseline scores, and the
 open items found so far. Exceptions will move to `docs/stig-exceptions.md`.
 
+> **Status:** step 2 applied and tested on both profiles. `ansible/stig.yml` and
+> `ansible/group_vars/stig.yml` apply the role; `docs/stig-exceptions.md` lists every
+> rule left off. Triage of the remaining scan failures is next.
+
 ## Approach
 
 - **Apply:** the `ansible-lockdown` RHEL9-STIG role, version 2.9.0 (STIG V2R9), from
@@ -30,13 +34,25 @@ After the signature-check fix (2026-11-19), before any STIG hardening:
 | `docker_vm` | 46.6% | 167 | 269 | All 3 pass |
 | `bare_metal` | 45.9% | 174 | 276 | All 3 pass |
 
+After applying the STIG (2026-11-19), role 2.9.0, rebooted into FIPS:
+
+| Profile | Score | Pass | Fail | CAT I fail | CAT II fail | CAT III fail |
+|---|---|---|---|---|---|---|
+| `docker_vm` | 80.1% | 353 | 83 | 5 | 71 | 7 |
+| `bare_metal` | 78.7% | 359 | 91 | 6 | 77 | 8 |
+
+The remaining failures are being triaged: some are the decisions in
+`docs/stig-exceptions.md`, and some are drift between the scanner content (SCAP
+Security Guide 0.1.80, STIG V2R7) and the role (V2R9). For example, the scanner
+expects the crypto policy `FIPS:STIG` and the role sets `FIPS`.
+
 CAT I failures, both profiles unless noted:
 
 | Rule | Expected after step 2 |
 |---|---|
 | `enable_fips_mode`, `enable_dracut_fips_module`, `sysctl_crypto_fips_enabled`, `configure_crypto_policy`, `harden_sshd_ciphers_openssh_conf_crypto_policy` | Fixed by FIPS mode |
 | `ensure_gpgcheck_local_packages`, `ensure_gpgcheck_never_disabled` | Fixed on `feature/stig`: every package is signature-checked. The build ships each vendor's key beside its RPMs and fails on any RPM that is not signed by it |
-| `grub2_password`, `grub2_admin_username` | Open until the GRUB password placeholder is set |
+| `grub2_password`, `grub2_admin_username` | Open finding with a POA&M (RHEL-09-212010, 212020) |
 | `no_empty_passwords`, `sshd_disable_empty_passwords` | Expected from the role |
 | `disable_ctrlaltdel_reboot`, `disable_ctrlaltdel_burstaction` | Expected from the role |
 | `dconf_gnome_disable_restart_shutdown`, `dconf_gnome_disable_ctrlaltdel_reboot`, `gnome_gdm_disable_automatic_login` (`bare_metal` only) | Expected from the role |
@@ -50,9 +66,10 @@ CAT I failures, both profiles unless noted:
 | IPv4/IPv6 forwarding | 253075, 254025 | Exception: Docker and libvirt need it |
 | USB mass storage, USBGuard | 291010–291030 | Exception: hosts can be installed and served from USB |
 | CAC login | 611160, 611165, 611170 | Not enforced |
-| Separate filesystems | 231015–231035 | Not done (CAT III) |
-| Audit disk full and disk error actions | 653020, 653025 | Not done |
-| DNS, NTP, remote syslog, GRUB password | 252035, 252040, others | Placeholders in `group_vars/stig.yml`, rules off until set |
+| Separate filesystems | 231010–231035 | Open finding, POA&M. 231010, 231015, 231035 are CAT II; 231020, 231025, 231030 are CAT III |
+| Audit disk full, disk error, and admin threshold actions | 653020, 653025, 653050 | Open finding, POA&M |
+| GRUB password | 212010, 212020 (CAT I) | Open finding, POA&M |
+| DNS, NTP, remote syslog | 252035, 252040, 252020, 652055 | Placeholders in `group_vars/stig.yml`, rules off until set |
 
 ## Open items for step 2
 

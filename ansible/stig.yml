@@ -1,0 +1,73 @@
+---
+# stig.yml — Apply the DISA STIG with the ansible-lockdown RHEL9-STIG role.
+#
+# Imported by site.yml after the bootstrap_server and pxe_server roles, and runs
+# only when install_stig is true. The role ships in the ansible-runner image; its
+# overrides are in group_vars/stig.yml. Exceptions and open findings are listed
+# in docs/stig-exceptions.md.
+
+- name: Apply the DISA STIG
+  hosts: bootstrap_servers
+  become: true
+  # Facts are gathered below as the connecting user instead.
+  gather_facts: false
+  vars_files:
+    - group_vars/stig.yml
+
+  pre_tasks:
+    # Gathered without sudo, so SUDO_USER is unset. The role otherwise asserts
+    # that the account sudo was invoked from has a password, and the Ansible
+    # service account deliberately has none: it logs in with a key, and
+    # group_vars/stig.yml keeps its sudo rule out of RHEL-09-611085.
+    - name: Gather facts as the connecting user
+      ansible.builtin.setup:
+      become: false
+      when: install_stig | bool
+
+    - name: Find the interface that holds the host's address
+      ansible.builtin.set_fact:
+        stig_primary_interface: >-
+          {%- for iface in ansible_facts['interfaces'] -%}
+          {%- set facts = ansible_facts[iface | replace('-', '_')] | default({}) -%}
+          {%- if (facts['ipv4']['address'] | default('')) == ansible_host -%}{{ iface }}{%- endif -%}
+          {%- endfor -%}
+      when: install_stig | bool
+
+    - name: Check that the interface was found
+      ansible.builtin.assert:
+        that: stig_primary_interface | default('', true) | length > 0
+        fail_msg: "No interface holds {{ ansible_host }}, so the STIG firewall zone has no interface to bind."
+      when: install_stig | bool
+
+    # bootstrap.ks enables root SSH in a drop-in, which wins over sshd_config,
+    # and the role does not remove it. Without this, RHEL-09-255045 stays open.
+    - name: Remove the kickstart's root SSH login drop-in
+      ansible.builtin.file:
+        path: /etc/ssh/sshd_config.d/01-permitrootlogin.conf
+        state: absent
+      register: stig_root_ssh_dropin
+      when: install_stig | bool
+
+    - name: Reload sshd without root login
+      ansible.builtin.systemd:
+        name: sshd
+        state: reloaded
+      when:
+        - install_stig | bool
+        - stig_root_ssh_dropin is changed
+
+  roles:
+    - role: ansible-lockdown.rhel9_stig
+      when: install_stig | bool
+
+  post_tasks:
+    # RHEL-09-433015 is off (docs/stig-exceptions.md), but a host hardened before
+    # that would still have fapolicyd running, and it stops every container.
+    - name: Keep fapolicyd stopped until its rules allow runc
+      ansible.builtin.systemd:
+        name: fapolicyd
+        enabled: false
+        state: stopped
+      when:
+        - install_stig | bool
+        - not (rhel_09_433015 | bool)

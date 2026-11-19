@@ -52,6 +52,8 @@
     create: true
   when: bootstrap_admin_user is defined and bootstrap_admin_user != 'root'
 
+# Under the STIG the wheel group uses sudo with its password: RHEL-09-611085
+# forbids NOPASSWD, and keeping the file would fight the STIG role on every run.
 - name: Allow wheel group sudo without password
   ansible.builtin.lineinfile:
     path: /etc/sudoers.d/wheel-nopasswd
@@ -59,6 +61,13 @@
     create: true
     mode: "0440"
     validate: "visudo -cf %s"
+  when: not (install_stig | bool)
+
+- name: Remove passwordless sudo for the wheel group under the STIG
+  ansible.builtin.file:
+    path: /etc/sudoers.d/wheel-nopasswd
+    state: absent
+  when: install_stig | bool
 
 # ── Ansible service account ──────────────────────────────────────────────────
 # bootstrap.sh creates this account before the first run, because Ansible logs
